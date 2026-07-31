@@ -11,10 +11,14 @@ import java.time.LocalDate;
 import java.util.List;
 
 public final class HotelTests {
-    private static int passed;
-    private static int failed;
-
     public static void main(String[] args) {
+        run();
+        if (Assert.hasFailures()) {
+            System.exit(1);
+        }
+    }
+    static void run() 
+    {
         pricingIsRatePerNight();
         rejectsPartyLargerThanRoom();
         rejectsDoubleBooking();
@@ -29,12 +33,7 @@ public final class HotelTests {
         cannotCheckOutTwice();
         cannotUpgradeIntoTheSameRoom();
 
-        System.out.printf("%n%d passed, %d failed%n", passed, failed);
-        if (failed > 0) {
-            System.exit(1);
-        }
     }
-
     // ------------------------------------------------------------------ tests
 
     private static void pricingIsRatePerNight() {
@@ -173,32 +172,13 @@ public final class HotelTests {
     // ---------------------------------------------------------------- helpers
 
     private static void check(String name, Object expected, Object actual) {
-        boolean ok = (expected instanceof Number expectedNumber && actual instanceof Number actualNumber)
-                ? Math.abs(expectedNumber.doubleValue() - actualNumber.doubleValue()) < 0.001
-                : java.util.Objects.equals(expected, actual);
-        report(ok, name, ok ? "" : "expected <" + expected + "> but was <" + actual + ">");
+       Assert.equals(name, expected, actual);
     }
 
     /** Passes when the action rejects the operation with an unchecked rule violation. */
     private static void expectFailure(String name, Runnable action) {
-        try {
-            action.run();
-            report(false, name, "expected an exception, none was thrown");
-        } catch (RuntimeException expected) {
-            report(true, name, "");
-        }
+        Assert.throwsError(name, action);
     }
-
-    private static void report(boolean ok, String name, String detail) {
-        if (ok) {
-            passed++;
-            System.out.println("  PASS  " + name);
-        } else {
-            failed++;
-            System.out.println("  FAIL  " + name + " -- " + detail);
-        }
-    }
-
     private HotelTests() {
     }
 }
