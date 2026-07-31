@@ -1,5 +1,7 @@
 # AI-Assisted Hotel Management System
 
+<img width="1919" height="1020" alt="image" src="https://github.com/user-attachments/assets/da596a5c-23dd-4caa-ac1b-945d0ac508a7" />
+
 This is a front-desk app for a small hotel, written in Java Swing. A receptionist
 picks a room off a grid, checks a guest in, extends or upgrades the stay, and checks
 them out, with a dashboard tracking occupancy and revenue.
