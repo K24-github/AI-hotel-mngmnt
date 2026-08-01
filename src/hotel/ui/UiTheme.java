@@ -1,11 +1,11 @@
 package hotel.ui;
-
 import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.SwingConstants;
 import javax.swing.border.Border;
 import javax.swing.border.EmptyBorder;
 import javax.swing.plaf.basic.BasicButtonUI;
@@ -26,12 +26,16 @@ final class UiTheme {
     static final Color MUTED_TEXT = new Color(71, 85, 105);
     static final Color OCCUPIED = new Color(239, 68, 68);
     static final Color AVAILABLE = new Color(34, 197, 94);
+    /** Held by a reservation on the viewed date, but nobody has arrived. */
+    static final Color RESERVED = new Color(245, 158, 11);
     static final Color DARK_TEXT = new Color(15, 23, 42);
 
     static final Color ACTION_CHECK_IN = new Color(37, 99, 235);
     static final Color ACTION_EXTEND = new Color(14, 116, 144);
     static final Color ACTION_UPGRADE = new Color(147, 51, 234);
     static final Color ACTION_CHECK_OUT = new Color(220, 38, 38);
+    static final Color ACTION_RESERVE = new Color(180, 83, 9);
+    static final Color ACTION_CANCEL = new Color(100, 116, 139);
 
     static final Font TITLE = new Font("SansSerif", Font.BOLD, 28);
     static final Font SUBTITLE = new Font("SansSerif", Font.PLAIN, 14);
@@ -40,7 +44,11 @@ final class UiTheme {
     static final Font LABEL = new Font("SansSerif", Font.BOLD, 12);
     static final Font CAPTION = new Font("SansSerif", Font.PLAIN, 12);
     static final Font STAT = new Font("SansSerif", Font.BOLD, 18);
+    /** Slightly smaller, for currency values that would otherwise be clipped. */
+    static final Font STAT_MONEY = new Font("SansSerif", Font.BOLD, 14);
     static final Font ROOM_BUTTON = new Font("SansSerif", Font.BOLD, 12);
+
+    private static final String BASE_COLOR = "hotel.baseColor";
 
     private UiTheme() {
     }
@@ -48,6 +56,13 @@ final class UiTheme {
     /** Rupiah amounts are whole numbers; the default currency format adds ",00". */
     static NumberFormat rupiahFormat() {
         NumberFormat format = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("id-ID"));
+        format.setMaximumFractionDigits(0);
+        return format;
+    }
+
+    /** Grouped digits with no currency symbol, for dashboard cards. */
+    static NumberFormat plainAmountFormat() {
+        NumberFormat format = NumberFormat.getIntegerInstance(Locale.forLanguageTag("id-ID"));
         format.setMaximumFractionDigits(0);
         return format;
     }
@@ -74,9 +89,11 @@ final class UiTheme {
     static JPanel compactFieldRow(String labelText, JComponent component) {
         JPanel row = new JPanel(new BorderLayout(8, 0));
         row.setOpaque(false);
-        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 34));
+        row.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
 
         JLabel label = new JLabel(labelText);
+        label.setHorizontalAlignment(SwingConstants.LEFT);
         label.setPreferredSize(new Dimension(140, 30));
 
         row.add(label, BorderLayout.WEST);
@@ -106,6 +123,14 @@ final class UiTheme {
         return button;
     }
 
+    /**
+     * Forces a solid, self-painted button.
+     * <p>
+     * The Windows and GTK look-and-feels draw buttons with the native theme engine and
+     * ignore {@code setBackground}, so a coloured button comes out white with only a
+     * tinted border. Installing {@link BasicButtonUI} puts the fill back under our
+     * control on every platform.
+     */
     static void styleFlat(AbstractButton button, Color background, Color foreground) {
         button.setUI(new BasicButtonUI());   // must run before the colours are applied
         button.setOpaque(true);
@@ -117,6 +142,7 @@ final class UiTheme {
         button.addMouseListener(new FlatHoverListener(button));
     }
 
+    /** Repaints a flat button in a new colour, keeping hover and border in step. */
     static void setFlatBackground(AbstractButton button, Color background) {
         button.putClientProperty(BASE_COLOR, background);
         button.setBackground(background);
@@ -125,8 +151,6 @@ final class UiTheme {
                 new EmptyBorder(6, 10, 6, 10)
         ));
     }
-
-    private static final String BASE_COLOR = "hotel.baseColor";
 
     private static Color baseColorOf(AbstractButton button) {
         Object stored = button.getClientProperty(BASE_COLOR);
@@ -141,7 +165,11 @@ final class UiTheme {
         );
     }
 
-
+    /**
+     * Hover and press feedback, which {@link BasicButtonUI} does not provide on its own.
+     * The base colour is read from the button each time rather than captured, so a room
+     * tile that flips from green to red keeps behaving correctly.
+     */
     private static final class FlatHoverListener extends MouseAdapter {
         private final AbstractButton button;
 
