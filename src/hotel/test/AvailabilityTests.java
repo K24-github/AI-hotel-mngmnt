@@ -1,7 +1,9 @@
 package hotel.test;
+
 import hotel.model.Booking;
 import hotel.model.Room;
 import hotel.service.HotelManager;
+
 import java.time.LocalDate;
 
 public final class AvailabilityTests {
@@ -46,6 +48,11 @@ public final class AvailabilityTests {
         occupancyCountsReservationsAndGuestsAlike();
 
         countsFollowTheChosenDate();
+        reservationCanBeExtendedBeforeArrival();
+        reservationCanBeMovedBeforeArrival();
+        movingAReservationLeavesRoomsUntouched();
+        upgradeOptionsSkipRoomsBookedLater();
+        finishedBookingsCannotBeChanged();
         collectionsAreNotMutableByCallers();
     }
 
@@ -299,6 +306,70 @@ public final class AvailabilityTests {
         Assert.equals("occupancy on arrival", 3.125, hotel.getOccupancyRate(BASE));
         Assert.equals("arrivals on the day", 1, hotel.getArrivalsOn(BASE));
         Assert.equals("no arrivals mid-stay", 0, hotel.getArrivalsOn(BASE.plusDays(1)));
+    }
+
+    /** A guest ringing ahead to add a night should not need the booking cancelled. */
+    private static void reservationCanBeExtendedBeforeArrival() {
+        HotelManager hotel = new HotelManager();
+        Room room = hotel.findRoom("101").orElseThrow();
+        Booking booking = hotel.createReservation(room, "Kevin", "0812", null, BASE, 2, 2);
+
+        hotel.extendStay(booking, 3);
+        Assert.equals("nights after extending a reservation", 5, booking.getNights());
+        Assert.equals("departure moves out", BASE.plusDays(5), booking.getDepartureDate());
+        Assert.isFalse("still nobody in the room", room.isOccupied());
+        Assert.equals("still a reservation", "Reserved", booking.getStatus().getLabel());
+    }
+
+    private static void reservationCanBeMovedBeforeArrival() {
+        HotelManager hotel = new HotelManager();
+        Room studio = hotel.findRoom("101").orElseThrow();
+        Room suite = hotel.findRoom("301").orElseThrow();
+        Booking booking = hotel.createReservation(studio, "Kevin", "0812", null, BASE, 2, 2);
+
+        hotel.upgradeBooking(booking, suite);
+        Assert.equals("booking now points at the suite", suite, booking.getRoom());
+        Assert.isTrue("old room free for those dates", hotel.isAvailable(studio, BASE, BASE.plusDays(2)));
+        Assert.isFalse("new room held for those dates", hotel.isAvailable(suite, BASE, BASE.plusDays(2)));
+        Assert.equals("whole stay repriced, none of it stayed", 2 * 1_350_000.0, booking.getCurrentBill());
+    }
+
+    /** Moving a reservation touches the ledger only; no guest is in a room to move. */
+    private static void movingAReservationLeavesRoomsUntouched() {
+        HotelManager hotel = new HotelManager();
+        Room studio = hotel.findRoom("101").orElseThrow();
+        Room suite = hotel.findRoom("301").orElseThrow();
+        Booking booking = hotel.createReservation(studio, "Kevin", "0812", null, BASE, 2, 2);
+
+        hotel.upgradeBooking(booking, suite);
+        Assert.isFalse("old room not physically occupied", studio.isOccupied());
+        Assert.isFalse("new room not physically occupied", suite.isOccupied());
+        Assert.equals("hotel still shows every room free today", 32, hotel.getAvailableCount());
+    }
+
+    private static void upgradeOptionsSkipRoomsBookedLater() {
+        HotelManager hotel = new HotelManager();
+        Room studio = hotel.findRoom("101").orElseThrow();
+        Room suite = hotel.findRoom("301").orElseThrow();
+        Booking booking = hotel.createReservation(studio, "Kevin", "0812", null, BASE, 3, 2);
+        hotel.createReservation(suite, "Rani", "0813", null, BASE.plusDays(1), 1, 1);
+
+        Assert.isFalse("suite booked mid-stay is not offered",
+                hotel.getUpgradeOptionsFor(booking).contains(suite));
+        Assert.throwsError("and is refused if forced",
+                () -> hotel.upgradeBooking(booking, suite));
+    }
+
+    private static void finishedBookingsCannotBeChanged() {
+        HotelManager hotel = new HotelManager();
+        Room room = hotel.findRoom("101").orElseThrow();
+        Booking booking = hotel.createBooking(room, "Kevin", "0812", null, 1, 1);
+        hotel.checkOut(room);
+
+        Assert.throwsError("extend after check-out", () -> hotel.extendStay(booking, 1));
+        Assert.throwsError("move after check-out",
+                () -> hotel.upgradeBooking(booking, hotel.findRoom("301").orElseThrow()));
+        Assert.equals("no options for a closed booking", 0, hotel.getUpgradeOptionsFor(booking).size());
     }
 
     private static void collectionsAreNotMutableByCallers() {

@@ -131,8 +131,19 @@ public class Booking {
         return getNightsStayedOn(LocalDate.now());
     }
 
+    /**
+     * Nights the guest has actually slept here by {@code onDate}.
+     * <p>
+     * Zero until they arrive: a reservation whose arrival date has already slipped by
+     * has still stayed nothing, and counting from the booked arrival would wrongly
+     * make the stay look used up. Once checked in, the clock runs from the real
+     * arrival rather than the booked one, so a late check-in is not overcharged.
+     */
     public int getNightsStayedOn(LocalDate onDate) {
-        long elapsed = ChronoUnit.DAYS.between(arrivalDate, onDate);
+        if (status == BookingStatus.RESERVED || checkedInOn == null) {
+            return 0;
+        }
+        long elapsed = ChronoUnit.DAYS.between(checkedInOn, onDate);
         if (elapsed < 0) {
             elapsed = 0;
         }

@@ -1,4 +1,5 @@
 package hotel.service;
+
 import hotel.model.Booking;
 import hotel.model.BookingStatus;
 import hotel.model.DeluxeRoom;
@@ -6,6 +7,7 @@ import hotel.model.Guest;
 import hotel.model.Room;
 import hotel.model.StudioRoom;
 import hotel.model.SuiteRoom;
+
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -117,15 +119,25 @@ public class HotelManager {
         if (fromRoom == null || !fromRoom.isOccupied()) {
             return List.of();
         }
-        Booking booking = fromRoom.getActiveBooking();
-        LocalDate today = LocalDate.now();
-        LocalDate movesOn = today.isAfter(booking.getArrivalDate()) ? today : booking.getArrivalDate();
+        return getUpgradeOptionsFor(fromRoom.getActiveBooking());
+    }
+
+    public List<Room> getUpgradeOptionsFor(Booking booking) {
+        if (booking == null || !booking.holdsInventory()) {
+            return List.of();
+        }
+        Room fromRoom = booking.getRoom();
+        LocalDate movesOn = moveDateFor(booking);
         LocalDate until = booking.getDepartureDate();
+        if (!until.isAfter(movesOn)) {
+            return List.of();
+        }
         return rooms.stream()
-                .filter(room -> !room.isOccupied())
+                .filter(room -> !room.equals(fromRoom))
+                .filter(room -> !(booking.isActive() && room.isOccupied()))
                 .filter(room -> room.getNightlyRate() > fromRoom.getNightlyRate())
                 .filter(room -> room.getCapacity() >= booking.getGuestCount())
-                .filter(room -> until.isAfter(movesOn) && isAvailable(room, movesOn, until))
+                .filter(room -> isAvailableExcluding(room, movesOn, until, booking))
                 .toList();
     }
 
@@ -193,10 +205,15 @@ public class HotelManager {
     }
 
     public Booking extendStay(Room room, int extraNights) {
-        Booking booking = requireActiveBooking(room);
+        return extendStay(requireActiveBooking(room), extraNights);
+    }
+
+    public Booking extendStay(Booking booking, int extraNights) {
+        requireOpen(booking);
         if (extraNights <= 0) {
             throw new IllegalArgumentException("Extra nights must be greater than zero.");
         }
+        Room room = booking.getRoom();
         LocalDate currentDeparture = booking.getDepartureDate();
         LocalDate newDeparture = currentDeparture.plusDays(extraNights);
         if (!isAvailableExcluding(room, currentDeparture, newDeparture, booking)) {
@@ -212,18 +229,28 @@ public class HotelManager {
      * remain billed at the original rate.
      */
     public Booking upgradeBooking(Room currentRoom, Room newRoom) {
-        Booking booking = requireActiveBooking(currentRoom);
+        return upgradeBooking(requireActiveBooking(currentRoom), newRoom);
+    }
+
+    /**
+     * Moves a booking into a different room. For an in-house guest the physical room
+     * assignment moves too; for a reservation only the ledger changes, since nobody
+     * is in a room yet.
+     */
+    public Booking upgradeBooking(Booking booking, Room newRoom) {
+        requireOpen(booking);
         if (newRoom == null) {
             throw new IllegalArgumentException("A new room must be selected.");
         }
+        Room currentRoom = booking.getRoom();
         if (newRoom.equals(currentRoom)) {
-            throw new IllegalArgumentException("Choose a different room to upgrade into.");
+            throw new IllegalArgumentException("Choose a different room to move into.");
         }
-        if (newRoom.isOccupied()) {
-            throw new IllegalStateException("Selected upgrade room is already occupied.");
+        // Only an in-house move cares about who is physically in the room right now.
+        if (booking.isActive() && newRoom.isOccupied()) {
+            throw new IllegalStateException("Selected room is already occupied.");
         }
-        LocalDate today = LocalDate.now();
-        LocalDate movesOn = today.isAfter(booking.getArrivalDate()) ? today : booking.getArrivalDate();
+        LocalDate movesOn = moveDateFor(booking);
         if (!isAvailableExcluding(newRoom, movesOn, booking.getDepartureDate(), booking)) {
             throw new IllegalStateException("Room " + newRoom.getRoomNumber()
                     + " is booked by someone else before this stay ends.");
@@ -231,9 +258,29 @@ public class HotelManager {
 
         // Validates capacity and remaining nights before any room state is touched.
         booking.upgradeRoom(newRoom);
-        currentRoom.clearBooking();
-        newRoom.assignBooking(booking);
+        if (booking.isActive()) {
+            currentRoom.clearBooking();
+            newRoom.assignBooking(booking);
+        }
         return booking;
+    }
+
+    private LocalDate moveDateFor(Booking booking) {
+        if (!booking.isActive()) {
+            return booking.getArrivalDate();
+        }
+        LocalDate today = LocalDate.now();
+        return today.isAfter(booking.getArrivalDate()) ? today : booking.getArrivalDate();
+    }
+
+    private void requireOpen(Booking booking) {
+        if (booking == null) {
+            throw new IllegalStateException("No booking selected.");
+        }
+        if (!booking.holdsInventory()) {
+            throw new IllegalStateException("Booking " + booking.getBookingId() + " is "
+                    + booking.getStatus().getLabel().toLowerCase() + " and can no longer be changed.");
+        }
     }
 
     /**

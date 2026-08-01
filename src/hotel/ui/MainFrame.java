@@ -195,8 +195,6 @@ public final class MainFrame extends JFrame {
         filterPanel.add(row2);
         filterPanel.add(legend);
 
-        // GridLayout stretches its cells to fill, so a filter matching one room used to
-        // produce a single full-height tile. Pinning the grid north keeps tile size fixed.
         JPanel gridHolder = new JPanel(new BorderLayout());
         gridHolder.setOpaque(false);
         gridHolder.add(gridPanel, BorderLayout.NORTH);
@@ -473,8 +471,9 @@ public final class MainFrame extends JFrame {
                 .append("Guests staying: ").append(booking.getGuestCount()).append('\n')
                 .append("Nights booked: ").append(booking.getNights())
                 .append(booking.isActive() ? " (" + booking.getNightsStayed() + " stayed so far)\n" : "\n")
-                .append("Checked in: ").append(booking.getArrivalDate())
-                .append("  |  Departs: ").append(booking.getDepartureDate()).append('\n')
+                .append(booking.isActive() ? "Checked in: " : "Arrives: ")
+                .append(booking.getArrivalDate().format(DATE_LABEL))
+                .append("  |  Departs: ").append(booking.getDepartureDate().format(DATE_LABEL)).append('\n')
                 .append(booking.isActive() ? "Current bill: " : "Quoted total: ")
                 .append(rupiah.format(booking.getCurrentBill())).append('\n')
                 .append("Booking ID: ").append(booking.getBookingId()).append('\n')
@@ -651,13 +650,18 @@ public final class MainFrame extends JFrame {
     }
 
     private void handleExtendStay() {
-        if (selectedRoom == null || !selectedRoom.isOccupied()) {
-            showMessage("Please select an occupied room to extend.");
+        Optional<Booking> holder = openBookingOnViewedDate();
+        if (holder.isEmpty()) {
+            showMessage("Select a room with a guest or a reservation on the chosen date.");
             return;
         }
+        Booking booking = holder.get();
 
         JSpinner extraNightsSpinner = new JSpinner(new SpinnerNumberModel(1, 1, MAX_EXTRA_NIGHTS, 1));
         JPanel panel = new JPanel(new GridLayout(0, 1, 6, 6));
+        panel.add(new JLabel(booking.getBookingId() + " - " + booking.getGuest().getFullName()
+                + " (" + booking.getStatus().getLabel().toLowerCase() + ")"));
+        panel.add(new JLabel("Currently leaving " + booking.getDepartureDate().format(DATE_LABEL)));
         panel.add(new JLabel("Add extra nights:"));
         panel.add(extraNightsSpinner);
 
@@ -668,44 +672,79 @@ public final class MainFrame extends JFrame {
 
         Room room = selectedRoom;
         run(() -> {
-            Booking booking = hotelManager.extendStay(room, (int) extraNightsSpinner.getValue());
+            hotelManager.extendStay(booking, (int) extraNightsSpinner.getValue());
             refreshAfterChange(room);
-            showMessage("Stay extended to " + booking.getNights() + " night(s). Updated bill: "
+            showMessage("Now " + booking.getNights() + " night(s), leaving "
+                    + booking.getDepartureDate().format(DATE_LABEL) + ".\nUpdated total: "
                     + rupiah.format(booking.getCurrentBill()));
         });
     }
 
     private void handleUpgrade() {
-        if (selectedRoom == null || !selectedRoom.isOccupied()) {
-            showMessage("Please select an occupied room to upgrade.");
+        Optional<Booking> holder = openBookingOnViewedDate();
+        if (holder.isEmpty()) {
+            showMessage("Select a room with a guest or a reservation on the chosen date.");
             return;
         }
+        Booking booking = holder.get();
 
-        List<Room> options = hotelManager.getAvailableUpgradeOptions(selectedRoom);
+        List<Room> options = hotelManager.getUpgradeOptionsFor(booking);
         if (options.isEmpty()) {
-            showMessage("No higher-tier rooms are available for upgrade right now.");
+            showMessage(explainNoUpgrade(booking));
             return;
         }
 
         JComboBox<Room> optionBox = new JComboBox<>(options.toArray(new Room[0]));
         JPanel panel = new JPanel(new GridLayout(0, 1, 6, 6));
+        panel.add(new JLabel(booking.getBookingId() + " - " + booking.getGuest().getFullName()
+                + " (" + booking.getStatus().getLabel().toLowerCase() + ")"));
         panel.add(new JLabel("Choose a new room:"));
         panel.add(optionBox);
-        panel.add(new JLabel("Nights already stayed keep the current room's rate."));
+        panel.add(new JLabel(booking.isActive()
+                ? "Nights already stayed keep the current room's rate."
+                : "Nobody has arrived, so the whole stay moves across."));
 
-        if (JOptionPane.showConfirmDialog(this, panel, "Upgrade Booking", JOptionPane.OK_CANCEL_OPTION)
+        if (JOptionPane.showConfirmDialog(this, panel, "Move Booking", JOptionPane.OK_CANCEL_OPTION)
                 != JOptionPane.OK_OPTION) {
             return;
         }
 
-        Room currentRoom = selectedRoom;
         Room newRoom = (Room) optionBox.getSelectedItem();
         run(() -> {
-            Booking booking = hotelManager.upgradeBooking(currentRoom, newRoom);
+            hotelManager.upgradeBooking(booking, newRoom);
             refreshAfterChange(booking.getRoom());
-            showMessage("Moved to " + booking.getRoom() + ". Updated bill: "
+            showMessage("Moved to " + booking.getRoom() + ".\nUpdated total: "
                     + rupiah.format(booking.getCurrentBill()));
         });
+    }
+    
+    private String explainNoUpgrade(Booking booking) {
+        Room current = booking.getRoom();
+        boolean anythingDearer = hotelManager.getRooms().stream()
+                .anyMatch(room -> room.getNightlyRate() > current.getNightlyRate());
+        if (!anythingDearer) {
+            return current.getTierName() + " is the highest tier, so room "
+                    + current.getRoomNumber() + " cannot be upgraded further.";
+        }
+
+        boolean anyBigEnough = hotelManager.getRooms().stream()
+                .filter(room -> room.getNightlyRate() > current.getNightlyRate())
+                .anyMatch(room -> room.getCapacity() >= booking.getGuestCount());
+        if (!anyBigEnough) {
+            return "No higher-tier room takes " + booking.getGuestCount() + " guests.";
+        }
+
+        return "Every higher-tier room is taken for at least one night of this stay ("
+                + booking.getArrivalDate().format(DATE_LABEL) + " to "
+                + booking.getDepartureDate().format(DATE_LABEL) + ").";
+    }
+
+    /** The booking holding the selected room on the viewed date, if it is still changeable. */
+    private Optional<Booking> openBookingOnViewedDate() {
+        if (selectedRoom == null) {
+            return Optional.empty();
+        }
+        return holderOn(selectedRoom).filter(Booking::holdsInventory);
     }
 
     private void handleCheckOut() {
