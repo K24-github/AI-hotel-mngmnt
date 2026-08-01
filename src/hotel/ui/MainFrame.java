@@ -1,6 +1,7 @@
 package hotel.ui;
 
 import hotel.model.Booking;
+import hotel.model.BookingStatus;
 import hotel.model.Room;
 import hotel.model.StaySegment;
 import hotel.service.HotelManager;
@@ -29,6 +30,8 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.GridLayout;
 import java.text.NumberFormat;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -39,6 +42,7 @@ import java.util.Optional;
 @SuppressWarnings("serial") // Swing components are never actually serialised here.
 public final class MainFrame extends JFrame {
     private static final int MAX_EXTRA_NIGHTS = 14;
+    private static final DateTimeFormatter DATE_LABEL = DateTimeFormatter.ofPattern("EEE, dd MMM yyyy");
 
     private final HotelManager hotelManager = new HotelManager();
     private final Map<Room, JButton> roomButtons = new LinkedHashMap<>();
@@ -55,11 +59,16 @@ public final class MainFrame extends JFrame {
     private final JLabel projectedRevenueLabel = new JLabel();
     private final JLabel realizedRevenueLabel = new JLabel();
     private final JLabel checkedOutLabel = new JLabel();
+    private final JLabel reservedLabel = new JLabel();
+    private final JLabel reservedValueLabel = new JLabel();
 
     private final JComboBox<String> floorFilterBox;
     private final JRadioButton allRoomsRadio = new JRadioButton("All", true);
     private final JRadioButton readyRoomsRadio = new JRadioButton("Ready Only");
     private final JRadioButton occupiedRoomsRadio = new JRadioButton("Occupied Only");
+    private final DateField dateField = new DateField(
+            LocalDate.now(), LocalDate.now().minusMonths(1), LocalDate.now().plusMonths(12));
+    private final JButton todayButton = UiTheme.actionButton("Today", UiTheme.ACTION_CANCEL);
     private final JSpinner quickNightsSpinner = new JSpinner(new SpinnerNumberModel(1, 1, 30, 1));
     private final JSpinner quickGuestsSpinner = new JSpinner(new SpinnerNumberModel(1, 1, maxRoomCapacity(), 1));
 
@@ -76,7 +85,7 @@ public final class MainFrame extends JFrame {
         floorFilterBox = new JComboBox<>(buildFloorLabels());
 
         bookingTableModel = new DefaultTableModel(
-                new String[]{"Booking ID", "Guest", "Room", "Tier", "Guests", "Nights", "Bill", "Status"}, 0
+                new String[]{"Booking ID", "Guest", "Room", "Tier", "Arrival", "Nights", "Bill", "Status"}, 0
         ) {
             @Override
             public boolean isCellEditable(int row, int column) {
@@ -107,6 +116,8 @@ public final class MainFrame extends JFrame {
         root.add(buildHeader(), BorderLayout.NORTH);
         root.add(splitPane, BorderLayout.CENTER);
 
+        dateField.setDayStatusProvider(this::statusOn);
+        dateField.setLegendText("Amber = the hotel has bookings that day");
         registerEvents();
         rebuildGrid();
         refreshDashboard();
@@ -142,9 +153,16 @@ public final class MainFrame extends JFrame {
         filterPanel.setBackground(Color.WHITE);
         filterPanel.setBorder(UiTheme.panelBorder(12));
 
-        JPanel row1 = new JPanel(new GridLayout(1, 2, 10, 10));
+        JPanel row1 = new JPanel(new GridLayout(1, 3, 10, 10));
         row1.setOpaque(false);
         row1.add(UiTheme.labeledControl("Floor Filter", floorFilterBox));
+
+        JPanel datePanel = new JPanel(new BorderLayout(8, 0));
+        datePanel.setOpaque(false);
+        datePanel.add(dateField, BorderLayout.CENTER);
+        todayButton.setPreferredSize(new Dimension(78, 30));
+        datePanel.add(todayButton, BorderLayout.EAST);
+        row1.add(UiTheme.labeledControl("Date", datePanel));
 
         JPanel quickPanel = new JPanel(new GridLayout(1, 2, 8, 8));
         quickPanel.setOpaque(false);
@@ -164,7 +182,7 @@ public final class MainFrame extends JFrame {
         row2.add(readyRoomsRadio);
         row2.add(occupiedRoomsRadio);
 
-        JLabel legend = new JLabel("Green = available / ready, Red = occupied. Click any room box to inspect the details.");
+        JLabel legend = new JLabel("Green = free, Amber = reserved, Red = guest in the room.");
         legend.setForeground(UiTheme.MUTED_TEXT);
 
         filterPanel.add(row1);
@@ -185,14 +203,20 @@ public final class MainFrame extends JFrame {
         panel.setBackground(Color.WHITE);
         panel.setBorder(UiTheme.panelBorder(16));
 
-        JPanel top = new JPanel(new GridLayout(2, 3, 10, 10));
+        JPanel top = new JPanel(new GridLayout(2, 4, 10, 10));
         top.setOpaque(false);
+        // Rupiah amounts are long; the default stat size overflows a quarter-width card.
+        projectedRevenueLabel.setFont(UiTheme.STAT_MONEY);
+        realizedRevenueLabel.setFont(UiTheme.STAT_MONEY);
+        reservedValueLabel.setFont(UiTheme.STAT_MONEY);
         top.add(UiTheme.statCard("Available Rooms", availableLabel));
         top.add(UiTheme.statCard("Occupied Rooms", occupiedLabel));
         top.add(UiTheme.statCard("Occupancy", occupancyLabel));
-        top.add(UiTheme.statCard("In-House (projected)", projectedRevenueLabel));
-        top.add(UiTheme.statCard("Collected (checked out)", realizedRevenueLabel));
-        top.add(UiTheme.statCard("Completed Check-outs", checkedOutLabel));
+        top.add(UiTheme.statCard("Reservations", reservedLabel));
+        top.add(UiTheme.statCard("In-House", projectedRevenueLabel));
+        top.add(UiTheme.statCard("Checked Out", realizedRevenueLabel));
+        top.add(UiTheme.statCard("Booked Ahead", reservedValueLabel));
+        top.add(UiTheme.statCard("Check-outs", checkedOutLabel));
 
         JPanel center = new JPanel(new GridLayout(2, 1, 12, 12));
         center.setOpaque(false);
@@ -223,11 +247,13 @@ public final class MainFrame extends JFrame {
         center.add(detailsPanel);
         center.add(historyPanel);
 
-        JPanel actions = new JPanel(new GridLayout(4, 1, 10, 10));
+        JPanel actions = new JPanel(new GridLayout(3, 2, 10, 10));
         actions.setOpaque(false);
         actions.add(buildActionButton("Check In / Book Room", UiTheme.ACTION_CHECK_IN, this::handleCheckIn));
+        actions.add(buildActionButton("Reserve Future Dates", UiTheme.ACTION_RESERVE, this::handleReserve));
         actions.add(buildActionButton("Extend Stay", UiTheme.ACTION_EXTEND, this::handleExtendStay));
         actions.add(buildActionButton("Upgrade Room", UiTheme.ACTION_UPGRADE, this::handleUpgrade));
+        actions.add(buildActionButton("Cancel Reservation", UiTheme.ACTION_CANCEL, this::handleCancelReservation));
         actions.add(buildActionButton("One-Click Check Out", UiTheme.ACTION_CHECK_OUT, this::handleCheckOut));
 
         panel.add(top, BorderLayout.NORTH);
@@ -243,6 +269,8 @@ public final class MainFrame extends JFrame {
     }
 
     private void registerEvents() {
+        dateField.addChangeListener(() -> refreshAfterChange(selectedRoom));
+        todayButton.addActionListener(e -> dateField.setValue(LocalDate.now()));
         floorFilterBox.addActionListener(e -> rebuildGrid());
         allRoomsRadio.addActionListener(e -> rebuildGrid());
         readyRoomsRadio.addActionListener(e -> rebuildGrid());
@@ -278,14 +306,31 @@ public final class MainFrame extends JFrame {
 
         return rooms.stream()
                 .filter(room -> allRoomsRadio.isSelected()
-                        || (readyRoomsRadio.isSelected() && !room.isOccupied())
-                        || (occupiedRoomsRadio.isSelected() && room.isOccupied()))
+                        || (readyRoomsRadio.isSelected() && isFreeOnViewedDate(room))
+                        || (occupiedRoomsRadio.isSelected() && !isFreeOnViewedDate(room)))
                 .toList();
     }
 
     private String buildRoomLabel(Room room) {
-        String state = room.isOccupied() ? "Occupied" : "Ready";
-        return "<html><center>" + room.getRoomNumber() + "<br>" + room.getTierName() + "<br>" + state + "</center></html>";
+        return "<html><center>" + room.getRoomNumber() + "<br>" + room.getTierName()
+                + "<br>" + describeState(room) + "</center></html>";
+    }
+
+    /** What the room is doing on the date currently being viewed. */
+    private String describeState(Room room) {
+        if (room.isOccupied() && isToday(getViewedDate())) {
+            return "Occupied";
+        }
+        return holderOn(room).isPresent() ? "Reserved" : "Ready";
+    }
+
+    /** The booking holding this room on the viewed date, if any. */
+    private Optional<Booking> holderOn(Room room) {
+        return hotelManager.getBookingOn(room, getViewedDate());
+    }
+
+    private boolean isFreeOnViewedDate(Room room) {
+        return holderOn(room).isEmpty();
     }
 
     private void updateRoomColors() {
@@ -294,11 +339,15 @@ public final class MainFrame extends JFrame {
             JButton button = entry.getValue();
             button.setText(buildRoomLabel(room));
 
-            if (room.isOccupied()) {
+            Optional<Booking> holder = holderOn(room);
+            if (holder.isEmpty()) {
+                UiTheme.setFlatBackground(button, UiTheme.AVAILABLE);
+                button.setForeground(UiTheme.DARK_TEXT);
+            } else if (holder.get().isActive() && isToday(getViewedDate())) {
                 UiTheme.setFlatBackground(button, UiTheme.OCCUPIED);
                 button.setForeground(Color.WHITE);
             } else {
-                UiTheme.setFlatBackground(button, UiTheme.AVAILABLE);
+                UiTheme.setFlatBackground(button, UiTheme.RESERVED);
                 button.setForeground(UiTheme.DARK_TEXT);
             }
         }
@@ -311,23 +360,24 @@ public final class MainFrame extends JFrame {
         int currentGuests = Math.min((int) quickGuestsSpinner.getValue(), room.getCapacity());
         quickGuestsSpinner.setModel(new SpinnerNumberModel(currentGuests, 1, room.getCapacity(), 1));
 
-        detailsArea.setText(room.isOccupied() ? describeOccupied(room) : describeAvailable(room));
+        Optional<Booking> holder = holderOn(room);
+        detailsArea.setText(holder.isPresent() ? describeBooked(room, holder.get()) : describeAvailable(room));
         detailsArea.setCaretPosition(0);
     }
 
-    private String describeOccupied(Room room) {
-        Booking booking = room.getActiveBooking();
+    private String describeBooked(Room room, Booking booking) {
         StringBuilder text = new StringBuilder()
-                .append("Room status: Occupied\n")
+                .append("Room status: ").append(booking.getStatus().getLabel()).append('\n')
                 .append("Guest: ").append(booking.getGuest().getFullName()).append('\n')
                 .append("Phone: ").append(booking.getGuest().getPhoneNumber()).append('\n')
                 .append("Notes: ").append(booking.getGuest().getNotes()).append('\n')
                 .append("Guests staying: ").append(booking.getGuestCount()).append('\n')
                 .append("Nights booked: ").append(booking.getNights())
-                .append(" (").append(booking.getNightsStayed()).append(" stayed so far)\n")
+                .append(booking.isActive() ? " (" + booking.getNightsStayed() + " stayed so far)\n" : "\n")
                 .append("Checked in: ").append(booking.getArrivalDate())
                 .append("  |  Departs: ").append(booking.getDepartureDate()).append('\n')
-                .append("Current bill: ").append(rupiah.format(booking.getCurrentBill())).append('\n')
+                .append(booking.isActive() ? "Current bill: " : "Quoted total: ")
+                .append(rupiah.format(booking.getCurrentBill())).append('\n')
                 .append("Booking ID: ").append(booking.getBookingId()).append('\n')
                 .append("Floor: ").append(room.getFloorNumber());
 
@@ -344,31 +394,73 @@ public final class MainFrame extends JFrame {
     }
 
     private String describeAvailable(Room room) {
-        return "Room status: Ready / available\n"
+        return "Room status: Free on " + getViewedDate().format(DATE_LABEL) + "\n"
                 + "Tier: " + room.getTierName() + '\n'
                 + "Nightly rate: " + rupiah.format(room.getNightlyRate()) + '\n'
                 + "Capacity: " + room.getCapacity() + " guest(s)\n"
                 + "Floor: " + room.getFloorNumber() + '\n'
-                + "Use the quick controls above to set expected nights and guests before checking in.";
+                + "Use the quick controls above to set expected nights and guests, then check in or reserve.";
     }
 
     // -------------------------------------------------------------- actions
 
+    /**
+     * Two jobs behind one button: if the room is held by a reservation whose guest
+     * has arrived, check that reservation in; otherwise take a walk-in.
+     */
     private void handleCheckIn() {
         if (selectedRoom == null) {
-            showMessage("Please click an available room first.");
+            showMessage("Please click a room first.");
             return;
         }
         if (selectedRoom.isOccupied()) {
-            showMessage("The selected room is already occupied.");
+            showMessage("There is already a guest in this room.");
             return;
         }
 
+        Optional<Booking> arriving = hotelManager.getBookingOn(selectedRoom, LocalDate.now())
+                .filter(booking -> booking.getStatus() == BookingStatus.RESERVED);
+        if (arriving.isPresent()) {
+            checkInExistingReservation(arriving.get());
+            return;
+        }
+
+        Optional<Booking> futureHolder = holderOn(selectedRoom);
+        if (futureHolder.isPresent() && !isToday(getViewedDate())) {
+            showMessage("That room is reserved on the date you are viewing. Switch to today to take a walk-in.");
+            return;
+        }
+
+        takeWalkIn();
+    }
+
+    private void checkInExistingReservation(Booking booking) {
+        int confirm = JOptionPane.showConfirmDialog(
+                this,
+                "Check in " + booking.getGuest().getFullName() + " for booking " + booking.getBookingId() + "?\n"
+                        + booking.getNights() + " night(s), total " + rupiah.format(booking.getCurrentBill()),
+                "Check In Reservation",
+                JOptionPane.YES_NO_OPTION
+        );
+        if (confirm != JOptionPane.YES_OPTION) {
+            return;
+        }
+        run(() -> {
+            hotelManager.checkIn(booking);
+            refreshAfterChange(booking.getRoom());
+            showMessage("Checked in. Room " + booking.getRoom().getRoomNumber() + " is now occupied.");
+        });
+    }
+
+    private void takeWalkIn() {
         Optional<CheckInDialog.Result> result = CheckInDialog.show(
                 this,
                 selectedRoom,
+                CheckInDialog.Mode.WALK_IN,
+                LocalDate.now(),
                 (int) quickNightsSpinner.getValue(),
-                (int) quickGuestsSpinner.getValue()
+                (int) quickGuestsSpinner.getValue(),
+                date -> statusOn(selectedRoom, date)
         );
         if (result.isEmpty()) {
             return;
@@ -377,16 +469,85 @@ public final class MainFrame extends JFrame {
         CheckInDialog.Result form = result.get();
         run(() -> {
             Booking booking = hotelManager.createBooking(
-                    selectedRoom,
-                    form.guestName(),
-                    form.phone(),
-                    form.notes(),
-                    form.nights(),
-                    form.guestCount()
+                    selectedRoom, form.guestName(), form.phone(), form.notes(),
+                    form.nights(), form.guestCount()
             );
             refreshAfterChange(booking.getRoom());
             showMessage("Booking " + booking.getBookingId() + " created. Bill so far: "
                     + rupiah.format(booking.getCurrentBill()));
+        });
+    }
+
+    /** Books a room for dates ahead without anybody arriving now. */
+    private void handleReserve() {
+        if (selectedRoom == null) {
+            showMessage("Please click a room first.");
+            return;
+        }
+
+        LocalDate suggested = getViewedDate().isBefore(LocalDate.now()) ? LocalDate.now() : getViewedDate();
+        Optional<CheckInDialog.Result> result = CheckInDialog.show(
+                this,
+                selectedRoom,
+                CheckInDialog.Mode.RESERVATION,
+                suggested,
+                (int) quickNightsSpinner.getValue(),
+                (int) quickGuestsSpinner.getValue(),
+                date -> statusOn(selectedRoom, date)
+        );
+        if (result.isEmpty()) {
+            return;
+        }
+
+        CheckInDialog.Result form = result.get();
+        Room room = selectedRoom;
+        run(() -> {
+            Booking booking = hotelManager.createReservation(
+                    room, form.guestName(), form.phone(), form.notes(),
+                    form.arrivalDate(), form.nights(), form.guestCount()
+            );
+            dateField.setValue(booking.getArrivalDate());
+            refreshAfterChange(room);
+            showMessage("Reservation " + booking.getBookingId() + " held for "
+                    + booking.getArrivalDate().format(DATE_LABEL) + " to "
+                    + booking.getDepartureDate().format(DATE_LABEL) + ".\nQuoted total: "
+                    + rupiah.format(booking.getCurrentBill()));
+        });
+    }
+
+    /** Releases a reservation whose guest has not arrived. */
+    private void handleCancelReservation() {
+        if (selectedRoom == null) {
+            showMessage("Please click a room first.");
+            return;
+        }
+
+        Optional<Booking> holder = holderOn(selectedRoom)
+                .filter(booking -> booking.getStatus() == BookingStatus.RESERVED);
+        if (holder.isEmpty()) {
+            showMessage("No reservation on " + getViewedDate().format(DATE_LABEL)
+                    + " for this room. A guest who has already checked in must be checked out instead.");
+            return;
+        }
+
+        Booking booking = holder.get();
+        int confirm = JOptionPane.showConfirmDialog(
+                this,
+                "Cancel " + booking.getBookingId() + " for " + booking.getGuest().getFullName() + "?\n"
+                        + booking.getArrivalDate().format(DATE_LABEL) + ", "
+                        + booking.getNights() + " night(s).\nThe room will be released for those dates.",
+                "Cancel Reservation",
+                JOptionPane.YES_NO_OPTION
+        );
+        if (confirm != JOptionPane.YES_OPTION) {
+            return;
+        }
+
+        Room room = selectedRoom;
+        run(() -> {
+            hotelManager.cancelReservation(booking);
+            refreshAfterChange(room);
+            showMessage("Reservation " + booking.getBookingId() + " cancelled.");
         });
     }
 
@@ -501,6 +662,8 @@ public final class MainFrame extends JFrame {
         projectedRevenueLabel.setText(rupiah.format(hotelManager.getProjectedRevenue()));
         realizedRevenueLabel.setText(rupiah.format(hotelManager.getRealizedRevenue()));
         checkedOutLabel.setText(String.valueOf(hotelManager.getCheckedOutCount()));
+        reservedLabel.setText(String.valueOf(hotelManager.getReservedCount()));
+        reservedValueLabel.setText(rupiah.format(hotelManager.getReservedValue()));
         refreshBookingTable();
     }
 
@@ -512,7 +675,7 @@ public final class MainFrame extends JFrame {
                     booking.getGuest().getFullName(),
                     booking.getRoom().getRoomNumber(),
                     booking.getRoom().getTierName(),
-                    booking.getGuestCount(),
+                    booking.getArrivalDate().format(DATE_LABEL),
                     booking.getNights(),
                     rupiah.format(booking.getCurrentBill()),
                     booking.getStatus().getLabel()
@@ -521,6 +684,37 @@ public final class MainFrame extends JFrame {
     }
 
     // --------------------------------------------------------------- helpers
+
+    /** The date the grid is showing. Defaults to today. */
+    private LocalDate getViewedDate() {
+        return dateField.getValue();
+    }
+
+    /**
+     * Tint for the main calendar: one colour for "the hotel has something booked on
+     * this date", whichever room it is. Deliberately hotel-wide and independent of
+     * the selected room, so the colours stay put while the clerk clicks around.
+     * The per-room, two-tone view lives in the booking dialog instead.
+     */
+    private DateField.DayStatus statusOn(LocalDate date) {
+        boolean anythingBooked = hotelManager.getRooms().stream()
+                .anyMatch(room -> hotelManager.getBookingOn(room, date).isPresent());
+        return anythingBooked ? DateField.DayStatus.RESERVED : DateField.DayStatus.FREE;
+    }
+
+    private DateField.DayStatus statusOn(Room room, LocalDate date) {
+        Optional<Booking> holder = hotelManager.getBookingOn(room, date);
+        if (holder.isEmpty()) {
+            return DateField.DayStatus.FREE;
+        }
+        return (holder.get().isActive() && isToday(date))
+                ? DateField.DayStatus.OCCUPIED
+                : DateField.DayStatus.RESERVED;
+    }
+
+    private static boolean isToday(LocalDate date) {
+        return LocalDate.now().equals(date);
+    }
 
     private List<Integer> buildFloorOptions() {
         // A leading null marks the "All Floors" entry, so List.copyOf is not usable here.

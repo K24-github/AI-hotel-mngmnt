@@ -18,20 +18,46 @@ import javax.swing.SpinnerNumberModel;
 import javax.swing.border.EmptyBorder;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.time.LocalDate;
 import java.util.Optional;
 
+/**
+ * The check-in form, also used to hold a room for future dates.
+ * The only difference between the two is whether the arrival date can be moved,
+ * so one form covers both rather than duplicating six fields.
+ */
 final class CheckInDialog {
+    /** Which kind of booking the form is collecting. */
+    enum Mode {
+        /** Guest is at the desk now; arrival is today and cannot be changed. */
+        WALK_IN("Check in", false),
+        /** Booking for a future date; arrival is editable. */
+        RESERVATION("Reserve", true);
+
+        private final String verb;
+        private final boolean arrivalEditable;
+
+        Mode(String verb, boolean arrivalEditable) {
+            this.verb = verb;
+            this.arrivalEditable = arrivalEditable;
+        }
+    }
+
     /** What the desk clerk typed. Validation is the model's job, not the form's. */
-    record Result(String guestName, String phone, String notes, int nights, int guestCount) {
+    record Result(String guestName, String phone, String notes,
+                  LocalDate arrivalDate, int nights, int guestCount) {
     }
 
     private static final String[] PAYMENT_TYPES = {"Walk-in", "Transfer", "Card"};
     private static final int MAX_NIGHTS = 30;
+    private static final int MAX_MONTHS_AHEAD = 12;
 
     private CheckInDialog() {
     }
 
-    static Optional<Result> show(Component parent, Room room, int defaultNights, int defaultGuests) {
+    static Optional<Result> show(Component parent, Room room, Mode mode,
+                                 LocalDate defaultArrival, int defaultNights, int defaultGuests,
+                                 DateField.DayStatusProvider arrivalStatus) {
         JTextField guestNameField = new JTextField();
         JTextField phoneField = new JTextField();
 
@@ -44,10 +70,17 @@ final class CheckInDialog {
 
         JSpinner nightsSpinner = new JSpinner(new SpinnerNumberModel(nights, 1, MAX_NIGHTS, 1));
         JSpinner guestsSpinner = new JSpinner(new SpinnerNumberModel(guests, 1, room.getCapacity(), 1));
+        LocalDate arrival = (defaultArrival == null) ? LocalDate.now() : defaultArrival;
+        DateField arrivalField = new DateField(arrival, LocalDate.now(),
+                LocalDate.now().plusMonths(MAX_MONTHS_AHEAD));
+        arrivalField.setDayStatusProvider(arrivalStatus);
+        arrivalField.setLegendText("Amber = reserved, Red = guest in the room");
+        arrivalField.setEnabled(mode.arrivalEditable);
 
         Dimension spinnerSize = new Dimension(120, 30);
         sizeTo(nightsSpinner, spinnerSize);
         sizeTo(guestsSpinner, spinnerSize);
+
 
         Dimension fieldSize = new Dimension(Integer.MAX_VALUE, 30);
         guestNameField.setMaximumSize(fieldSize);
@@ -55,46 +88,52 @@ final class CheckInDialog {
 
         JComboBox<String> paymentTypeBox = new JComboBox<>(PAYMENT_TYPES);
         paymentTypeBox.setMaximumSize(fieldSize);
+        if (mode == Mode.RESERVATION) {
+            paymentTypeBox.setSelectedItem("Transfer");
+        }
 
         JCheckBox breakfastCheck = new JCheckBox("Breakfast requested");
 
         JPanel form = new JPanel();
-        form.setBorder(new EmptyBorder(10, 10, 10, 10));
+        form.setBorder(new EmptyBorder(12, 12, 12, 12));
         form.setLayout(new BoxLayout(form, BoxLayout.Y_AXIS));
 
-        form.add(new JLabel("Guest name:"));
-        form.add(guestNameField);
-        form.add(Box.createVerticalStrut(8));
+        addRow(form, new JLabel("Guest name:"));
+        addRow(form, guestNameField);
+        addGap(form);
 
-        form.add(new JLabel("Phone number:"));
-        form.add(phoneField);
-        form.add(Box.createVerticalStrut(8));
+        addRow(form, new JLabel("Phone number:"));
+        addRow(form, phoneField);
+        addGap(form);
 
-        form.add(new JLabel("Special notes:"));
-        form.add(new JScrollPane(notesArea));
-        form.add(Box.createVerticalStrut(8));
+        addRow(form, new JLabel("Special notes:"));
+        addRow(form, new JScrollPane(notesArea));
+        addGap(form);
 
-        form.add(UiTheme.compactFieldRow("Number of nights:", nightsSpinner));
-        form.add(Box.createVerticalStrut(8));
+        addRow(form, UiTheme.compactFieldRow("Arrival date:", arrivalField));
+        addGap(form);
 
-        form.add(UiTheme.compactFieldRow("Number of guests:", guestsSpinner));
-        form.add(Box.createVerticalStrut(8));
+        addRow(form, UiTheme.compactFieldRow("Number of nights:", nightsSpinner));
+        addGap(form);
 
-        form.add(new JLabel("Payment note:"));
-        form.add(paymentTypeBox);
-        form.add(Box.createVerticalStrut(8));
+        addRow(form, UiTheme.compactFieldRow("Number of guests:", guestsSpinner));
+        addGap(form);
 
-        form.add(breakfastCheck);
+        addRow(form, new JLabel("Payment note:"));
+        addRow(form, paymentTypeBox);
+        addGap(form);
+
+        addRow(form, breakfastCheck);
 
         JScrollPane scrollPane = new JScrollPane(form);
-        scrollPane.setPreferredSize(new Dimension(420, 420));
+        scrollPane.setPreferredSize(new Dimension(420, 460));
         scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
         scrollPane.getVerticalScrollBar().setUnitIncrement(16);
 
         int choice = JOptionPane.showConfirmDialog(
                 parent,
                 scrollPane,
-                "Book " + room.getRoomNumber() + " - " + room.getTierName(),
+                mode.verb + " - " + room.getRoomNumber() + " " + room.getTierName(),
                 JOptionPane.OK_CANCEL_OPTION,
                 JOptionPane.PLAIN_MESSAGE
         );
@@ -107,6 +146,7 @@ final class CheckInDialog {
                 guestNameField.getText(),
                 phoneField.getText(),
                 buildNotes(notesArea.getText(), breakfastCheck.isSelected(), String.valueOf(paymentTypeBox.getSelectedItem())),
+                arrivalField.getValue(),
                 (int) nightsSpinner.getValue(),
                 (int) guestsSpinner.getValue()
         ));
@@ -129,6 +169,19 @@ final class CheckInDialog {
             notes.append(" | ");
         }
         notes.append(part);
+    }
+
+    /**
+     * Adds a row flush to the left edge. BoxLayout centres anything narrower than
+     * the panel unless told otherwise, which is what left labels floating mid-form.
+     */
+    private static void addRow(JPanel form, JComponent component) {
+        component.setAlignmentX(Component.LEFT_ALIGNMENT);
+        form.add(component);
+    }
+
+    private static void addGap(JPanel form) {
+        form.add(Box.createVerticalStrut(8));
     }
 
     private static void sizeTo(JComponent component, Dimension size) {

@@ -6,6 +6,7 @@ import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.SwingConstants;
 import javax.swing.border.Border;
 import javax.swing.border.EmptyBorder;
 import javax.swing.plaf.basic.BasicButtonUI;
@@ -26,12 +27,16 @@ final class UiTheme {
     static final Color MUTED_TEXT = new Color(71, 85, 105);
     static final Color OCCUPIED = new Color(239, 68, 68);
     static final Color AVAILABLE = new Color(34, 197, 94);
+    /** Held by a reservation on the viewed date, but nobody has arrived. */
+    static final Color RESERVED = new Color(245, 158, 11);
     static final Color DARK_TEXT = new Color(15, 23, 42);
 
     static final Color ACTION_CHECK_IN = new Color(37, 99, 235);
     static final Color ACTION_EXTEND = new Color(14, 116, 144);
     static final Color ACTION_UPGRADE = new Color(147, 51, 234);
     static final Color ACTION_CHECK_OUT = new Color(220, 38, 38);
+    static final Color ACTION_RESERVE = new Color(180, 83, 9);
+    static final Color ACTION_CANCEL = new Color(100, 116, 139);
 
     static final Font TITLE = new Font("SansSerif", Font.BOLD, 28);
     static final Font SUBTITLE = new Font("SansSerif", Font.PLAIN, 14);
@@ -40,6 +45,8 @@ final class UiTheme {
     static final Font LABEL = new Font("SansSerif", Font.BOLD, 12);
     static final Font CAPTION = new Font("SansSerif", Font.PLAIN, 12);
     static final Font STAT = new Font("SansSerif", Font.BOLD, 18);
+    /** Slightly smaller, for currency values that would otherwise be clipped. */
+    static final Font STAT_MONEY = new Font("SansSerif", Font.BOLD, 15);
     static final Font ROOM_BUTTON = new Font("SansSerif", Font.BOLD, 12);
 
     private UiTheme() {
@@ -74,9 +81,11 @@ final class UiTheme {
     static JPanel compactFieldRow(String labelText, JComponent component) {
         JPanel row = new JPanel(new BorderLayout(8, 0));
         row.setOpaque(false);
-        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 34));
+        row.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
 
         JLabel label = new JLabel(labelText);
+        label.setHorizontalAlignment(SwingConstants.LEFT);
         label.setPreferredSize(new Dimension(140, 30));
 
         row.add(label, BorderLayout.WEST);
