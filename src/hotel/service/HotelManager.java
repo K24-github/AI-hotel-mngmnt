@@ -8,11 +8,17 @@ import hotel.model.Room;
 import hotel.model.StudioRoom;
 import hotel.model.SuiteRoom;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Service layer: owns the room inventory and the booking ledger, and is the only
+ * place that mutates both together. The UI talks to this class and never to the
+ * collections directly.
+ */
 public class HotelManager {
     private static final Comparator<Room> ROOM_ORDER =
             Comparator.comparingInt(Room::getFloorNumber).thenComparing(Room::getRoomNumber);
@@ -73,6 +79,39 @@ public class HotelManager {
     }
 
     /**
+     * True if nothing already holds this room across [from, to). Back-to-back stays
+     * are fine: a departure on the 5th does not clash with an arrival on the 5th.
+     */
+    public boolean isAvailable(Room room, LocalDate from, LocalDate to) {
+        if (room == null || from == null || to == null) {
+            throw new IllegalArgumentException("Room and both dates are required.");
+        }
+        if (!to.isAfter(from)) {
+            throw new IllegalArgumentException("Departure must be after arrival.");
+        }
+        return bookings.stream().noneMatch(booking ->
+                booking.getRoom().equals(room) && booking.overlaps(from, to));
+    }
+
+    /** Same as {@link #isAvailable}, but ignores one booking — used when changing it. */
+    private boolean isAvailableExcluding(Room room, LocalDate from, LocalDate to, Booking ignored) {
+        return bookings.stream().noneMatch(booking ->
+                booking != ignored && booking.getRoom().equals(room) && booking.overlaps(from, to));
+    }
+
+    public List<Room> getAvailableRooms(LocalDate from, LocalDate to) {
+        return rooms.stream().filter(room -> isAvailable(room, from, to)).toList();
+    }
+
+    /** Bookings holding this room on a given night, if any. */
+    public Optional<Booking> getBookingOn(Room room, LocalDate date) {
+        return bookings.stream()
+                .filter(booking -> booking.getRoom().equals(room))
+                .filter(booking -> booking.overlaps(date, date.plusDays(1)))
+                .findFirst();
+    }
+
+    /**
      * Free rooms that cost more per night than {@code fromRoom} and still fit the party.
      * Returns an empty list rather than throwing when the room is not occupied.
      */
@@ -81,36 +120,91 @@ public class HotelManager {
             return List.of();
         }
         Booking booking = fromRoom.getActiveBooking();
+        LocalDate today = LocalDate.now();
+        LocalDate movesOn = today.isAfter(booking.getArrivalDate()) ? today : booking.getArrivalDate();
+        LocalDate until = booking.getDepartureDate();
         return rooms.stream()
                 .filter(room -> !room.isOccupied())
                 .filter(room -> room.getNightlyRate() > fromRoom.getNightlyRate())
                 .filter(room -> room.getCapacity() >= booking.getGuestCount())
+                .filter(room -> until.isAfter(movesOn) && isAvailable(room, movesOn, until))
                 .toList();
     }
 
     // ------------------------------------------------------------- operations
 
-    public Booking createBooking(Room room, String guestName, String phone, String notes,
-                                 int nights, int guestCount) {
+    /**
+     * Books a room for future dates without anybody arriving. The room is held but
+     * stays physically free until {@link #checkIn}.
+     */
+    public Booking createReservation(Room room, String guestName, String phone, String notes,
+                                     LocalDate arrivalDate, int nights, int guestCount) {
         if (room == null) {
             throw new IllegalArgumentException("A room must be selected.");
         }
         if (!rooms.contains(room)) {
             throw new IllegalArgumentException("Room " + room.getRoomNumber() + " is not part of this hotel.");
         }
-        if (room.isOccupied()) {
-            throw new IllegalStateException("Selected room is already occupied.");
+        if (arrivalDate == null) {
+            throw new IllegalArgumentException("An arrival date is required.");
+        }
+        if (nights <= 0) {
+            throw new IllegalArgumentException("Nights must be greater than zero.");
+        }
+        if (!isAvailable(room, arrivalDate, arrivalDate.plusDays(nights))) {
+            throw new IllegalStateException("Room " + room.getRoomNumber()
+                    + " is already booked for some of those dates.");
         }
 
         Guest guest = new Guest(guestName, phone, notes);
-        Booking booking = new Booking(guest, room, nights, guestCount);
-        room.assignBooking(booking);
+        Booking booking = new Booking(guest, room, nights, guestCount, arrivalDate);
         bookings.add(booking);
+        return booking;
+    }
+
+    /** Walk-in: reserve from today and put the guest in the room immediately. */
+    public Booking createBooking(Room room, String guestName, String phone, String notes,
+                                 int nights, int guestCount) {
+        Booking booking = createReservation(room, guestName, phone, notes, LocalDate.now(), nights, guestCount);
+        checkIn(booking);
+        return booking;
+    }
+
+    /** Moves a reservation to in-house and physically occupies the room. */
+    public Booking checkIn(Booking booking) {
+        if (booking == null) {
+            throw new IllegalArgumentException("A booking is required.");
+        }
+        Room room = booking.getRoom();
+        if (room.isOccupied()) {
+            throw new IllegalStateException("Room " + room.getRoomNumber()
+                    + " still has a guest in it.");
+        }
+        booking.checkIn();
+        room.assignBooking(booking);
+        return booking;
+    }
+
+    /** Cancels a reservation before arrival and frees its dates. */
+    public Booking cancelReservation(Booking booking) {
+        if (booking == null) {
+            throw new IllegalArgumentException("A booking is required.");
+        }
+        booking.cancel();
         return booking;
     }
 
     public Booking extendStay(Room room, int extraNights) {
         Booking booking = requireActiveBooking(room);
+        if (extraNights <= 0) {
+            throw new IllegalArgumentException("Extra nights must be greater than zero.");
+        }
+        LocalDate currentDeparture = booking.getDepartureDate();
+        LocalDate newDeparture = currentDeparture.plusDays(extraNights);
+        if (!isAvailableExcluding(room, currentDeparture, newDeparture, booking)) {
+            throw new IllegalStateException("Room " + room.getRoomNumber()
+                    + " is booked by someone else on those nights.");
+        }
         booking.extendStay(extraNights);
         return booking;
     }
@@ -129,6 +223,12 @@ public class HotelManager {
         }
         if (newRoom.isOccupied()) {
             throw new IllegalStateException("Selected upgrade room is already occupied.");
+        }
+        LocalDate today = LocalDate.now();
+        LocalDate movesOn = today.isAfter(booking.getArrivalDate()) ? today : booking.getArrivalDate();
+        if (!isAvailableExcluding(newRoom, movesOn, booking.getDepartureDate(), booking)) {
+            throw new IllegalStateException("Room " + newRoom.getRoomNumber()
+                    + " is booked by someone else before this stay ends.");
         }
 
         // Validates capacity and remaining nights before any room state is touched.
@@ -160,6 +260,20 @@ public class HotelManager {
         return (int) rooms.stream().filter(Room::isOccupied).count();
     }
 
+    public int getReservedCount() {
+        return (int) bookings.stream()
+                .filter(booking -> booking.getStatus() == BookingStatus.RESERVED)
+                .count();
+    }
+
+    /** Value of stays booked but not yet arrived. */
+    public double getReservedValue() {
+        return bookings.stream()
+                .filter(booking -> booking.getStatus() == BookingStatus.RESERVED)
+                .mapToDouble(Booking::getCurrentBill)
+                .sum();
+    }
+
     public int getCheckedOutCount() {
         return (int) bookings.stream()
                 .filter(booking -> booking.getStatus() == BookingStatus.CHECKED_OUT)
@@ -182,7 +296,7 @@ public class HotelManager {
     /** Money already collected: frozen final bills of completed stays. */
     public double getRealizedRevenue() {
         return bookings.stream()
-                .filter(booking -> !booking.isActive())
+                .filter(booking -> booking.getStatus() == BookingStatus.CHECKED_OUT)
                 .mapToDouble(Booking::getCurrentBill)
                 .sum();
     }

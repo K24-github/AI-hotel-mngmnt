@@ -1,8 +1,10 @@
 package hotel.model;
 
 public enum BookingStatus {
+    RESERVED("Reserved"),
     CHECKED_IN("Checked in"),
-    CHECKED_OUT("Checked out");
+    CHECKED_OUT("Checked out"),
+    CANCELLED("Cancelled");
 
     private final String label;
 
@@ -12,5 +14,9 @@ public enum BookingStatus {
 
     public String getLabel() {
         return label;
+    }
+
+    public boolean holdsInventory(){
+        return this == RESERVED || this == CHECKED_IN;
     }
 }

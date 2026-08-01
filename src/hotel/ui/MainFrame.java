@@ -325,7 +325,8 @@ public final class MainFrame extends JFrame {
                 .append("Guests staying: ").append(booking.getGuestCount()).append('\n')
                 .append("Nights booked: ").append(booking.getNights())
                 .append(" (").append(booking.getNightsStayed()).append(" stayed so far)\n")
-                .append("Checked in: ").append(booking.getCheckInDate()).append('\n')
+                .append("Checked in: ").append(booking.getArrivalDate())
+                .append("  |  Departs: ").append(booking.getDepartureDate()).append('\n')
                 .append("Current bill: ").append(rupiah.format(booking.getCurrentBill())).append('\n')
                 .append("Booking ID: ").append(booking.getBookingId()).append('\n')
                 .append("Floor: ").append(room.getFloorNumber());

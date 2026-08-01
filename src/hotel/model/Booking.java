@@ -13,27 +13,28 @@ public class Booking {
     private final String bookingId;
     private final Guest guest;
     private final int guestCount;
-    private final LocalDate checkInDate;
+    private final LocalDate arrivalDate;
     private final List<StaySegment> segments = new ArrayList<>();
 
-    private BookingStatus status = BookingStatus.CHECKED_IN;
-    private LocalDate checkOutDate;
+    private BookingStatus status = BookingStatus.RESERVED;
+    private LocalDate checkedInOn;
+    private LocalDate checkedOutOn;
     private Double finalBill;
 
     public Booking(Guest guest, Room room, int nights, int guestCount) {
         this(guest, room, nights, guestCount, LocalDate.now());
     }
 
-    /** Date-injecting constructor; used by tests to simulate a stay in progress. */
-    public Booking(Guest guest, Room room, int nights, int guestCount, LocalDate checkInDate) {
+    /*** @param arrivalDate the first night of the stay; may be in the future. */
+    public Booking(Guest guest, Room room, int nights, int guestCount, LocalDate arrivalDate) {
         if (guest == null) {
             throw new IllegalArgumentException("A guest is required.");
         }
         if (room == null) {
             throw new IllegalArgumentException("A room must be selected.");
         }
-        if (checkInDate == null) {
-            throw new IllegalArgumentException("Check-in date is required.");
+        if (arrivalDate == null) {
+            throw new IllegalArgumentException("Arrival date is required.");
         }
         if (nights <= 0) {
             throw new IllegalArgumentException("Nights must be greater than zero.");
@@ -47,7 +48,7 @@ public class Booking {
         this.bookingId = "BK" + SEQUENCE.incrementAndGet();
         this.guest = guest;
         this.guestCount = guestCount;
-        this.checkInDate = checkInDate;
+        this.arrivalDate = arrivalDate;
         this.segments.add(new StaySegment(room, nights));
     }
 
@@ -63,21 +64,49 @@ public class Booking {
         return guestCount;
     }
 
-    public LocalDate getCheckInDate() {
-        return checkInDate;
+    /** First night of the stay. */
+    public LocalDate getArrivalDate() {
+        return arrivalDate;
     }
 
-    /** @return the check-out date, or {@code null} while the guest is still in-house. */
-    public LocalDate getCheckOutDate() {
-        return checkOutDate;
+    /**
+     * The morning the guest leaves. Exclusive: a stay arriving on the 1st for two
+     * nights departs on the 3rd, and the 3rd is bookable by somebody else.
+     */
+    public LocalDate getDepartureDate() {
+        return arrivalDate.plusDays(getNights());
+    }
+
+    /** True if this booking's dates overlap [from, to). Cancelled bookings never do. */
+    public boolean overlaps(LocalDate from, LocalDate to) {
+        if (!status.holdsInventory()) {
+            return false;
+        }
+        return arrivalDate.isBefore(to) && from.isBefore(getDepartureDate());
+    }
+
+    /** @return when the guest actually arrived, or {@code null} if they have not. */
+    public LocalDate getCheckedInOn() {
+        return checkedInOn;
+    }
+
+    /** @return when the guest actually left, or {@code null} if they have not. */
+    public LocalDate getCheckedOutOn() {
+        return checkedOutOn;
     }
 
     public BookingStatus getStatus() {
         return status;
     }
 
+    /** True only while the guest is physically in the room. */
     public boolean isActive() {
         return status == BookingStatus.CHECKED_IN;
+    }
+
+    /** True while the booking still blocks the room for its dates. */
+    public boolean holdsInventory() {
+        return status.holdsInventory();
     }
 
     /** The room the guest is in now, i.e. the room of the most recent segment. */
@@ -103,7 +132,7 @@ public class Booking {
     }
 
     public int getNightsStayedOn(LocalDate onDate) {
-        long elapsed = ChronoUnit.DAYS.between(checkInDate, onDate);
+        long elapsed = ChronoUnit.DAYS.between(arrivalDate, onDate);
         if (elapsed < 0) {
             elapsed = 0;
         }
@@ -125,8 +154,32 @@ public class Booking {
         return finalBill;
     }
 
+    /** Marks the guest as arrived. Only a reservation can be checked in. */
+    public void checkIn() {
+        checkIn(LocalDate.now());
+    }
+
+    public void checkIn(LocalDate onDate) {
+        if (status != BookingStatus.RESERVED) {
+            throw new IllegalStateException("Booking " + bookingId + " is " + status.getLabel().toLowerCase()
+                    + " and cannot be checked in.");
+        }
+        checkedInOn = (onDate == null ? LocalDate.now() : onDate);
+        status = BookingStatus.CHECKED_IN;
+    }
+
+    /** Cancels a reservation before arrival, releasing the room for its dates. */
+    public void cancel() {
+        if (status != BookingStatus.RESERVED) {
+            throw new IllegalStateException("Only a reservation can be cancelled; this one is "
+                    + status.getLabel().toLowerCase() + ".");
+        }
+        status = BookingStatus.CANCELLED;
+        finalBill = 0.0;
+    }
+
     public void extendStay(int extraNights) {
-        requireActive();
+        requireOpen();
         if (extraNights <= 0) {
             throw new IllegalArgumentException("Extra nights must be greater than zero.");
         }
@@ -142,7 +195,7 @@ public class Booking {
      * stayed stay billed at the old room's rate.
      */
     public void upgradeRoom(Room newRoom, LocalDate onDate) {
-        requireActive();
+        requireOpen();
         if (newRoom == null) {
             throw new IllegalArgumentException("New room cannot be empty.");
         }
@@ -190,16 +243,20 @@ public class Booking {
     }
 
     public double checkOut(LocalDate onDate) {
-        requireActive();
+        if (status != BookingStatus.CHECKED_IN) {
+            throw new IllegalStateException("Booking " + bookingId + " is not checked in.");
+        }
         finalBill = segments.stream().mapToDouble(StaySegment::getSubtotal).sum();
-        checkOutDate = (onDate == null ? LocalDate.now() : onDate);
+        checkedOutOn = (onDate == null ? LocalDate.now() : onDate);
         status = BookingStatus.CHECKED_OUT;
         return finalBill;
     }
 
-    private void requireActive() {
-        if (!isActive()) {
-            throw new IllegalStateException("Booking " + bookingId + " has already been checked out.");
+    /** Open means still changeable: reserved but not arrived, or currently in-house. */
+    private void requireOpen() {
+        if (!status.holdsInventory()) {
+            throw new IllegalStateException("Booking " + bookingId + " is "
+                    + status.getLabel().toLowerCase() + " and can no longer be changed.");
         }
     }
 
