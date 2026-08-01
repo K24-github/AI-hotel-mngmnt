@@ -1,5 +1,4 @@
 package hotel.service;
-
 import hotel.model.Booking;
 import hotel.model.BookingStatus;
 import hotel.model.DeluxeRoom;
@@ -7,7 +6,6 @@ import hotel.model.Guest;
 import hotel.model.Room;
 import hotel.model.StudioRoom;
 import hotel.model.SuiteRoom;
-
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -258,6 +256,28 @@ public class HotelManager {
 
     public int getOccupiedCount() {
         return (int) rooms.stream().filter(Room::isOccupied).count();
+    }
+
+    /** Rooms held on {@code date}, whether by an in-house guest or a reservation. */
+    public int getBookedCount(LocalDate date) {
+        return (int) rooms.stream().filter(room -> getBookingOn(room, date).isPresent()).count();
+    }
+
+    public int getFreeCount(LocalDate date) {
+        return rooms.size() - getBookedCount(date);
+    }
+
+    /** Share of the hotel spoken for on {@code date}, as a percentage. */
+    public double getOccupancyRate(LocalDate date) {
+        return rooms.isEmpty() ? 0 : (getBookedCount(date) * 100.0) / rooms.size();
+    }
+
+    /** Bookings arriving on {@code date}; the day's expected check-ins. */
+    public int getArrivalsOn(LocalDate date) {
+        return (int) bookings.stream()
+                .filter(Booking::holdsInventory)
+                .filter(booking -> booking.getArrivalDate().equals(date))
+                .count();
     }
 
     public int getReservedCount() {

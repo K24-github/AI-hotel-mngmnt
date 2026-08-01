@@ -20,6 +20,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+/**
+ * A date field that opens a month calendar when clicked.
+ * <p>
+ * Swing has no date picker in the standard library, so this is a small one built
+ * from buttons. Days are tinted by a {@link DayStatusProvider} so the clerk can see
+ * at a glance which dates are already taken before picking one.
+ */
 @SuppressWarnings("serial") // Swing components are never actually serialised here.
 final class DateField extends JPanel {
     /** What a given date looks like for whatever the calendar is describing. */

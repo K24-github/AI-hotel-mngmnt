@@ -1,9 +1,7 @@
 package hotel.test;
-
 import hotel.model.Booking;
 import hotel.model.Room;
 import hotel.service.HotelManager;
-
 import java.time.LocalDate;
 
 public final class AvailabilityTests {
@@ -44,6 +42,10 @@ public final class AvailabilityTests {
         upgradeOptionsExcludeTooSmallRooms();
         cannotUpgradeIntoTheSameRoom();
 
+        occupancyIsCountedPerDate();
+        occupancyCountsReservationsAndGuestsAlike();
+
+        countsFollowTheChosenDate();
         collectionsAreNotMutableByCallers();
     }
 
@@ -253,6 +255,50 @@ public final class AvailabilityTests {
         Room studio = hotel.findRoom("101").orElseThrow();
         hotel.createBooking(studio, "Kevin", "0812", null, 1, 1);
         Assert.throwsError("upgrade into the same room", () -> hotel.upgradeBooking(studio, studio));
+    }
+
+    /** The dashboard asks "how full are we that night", not "who is here now". */
+    private static void occupancyIsCountedPerDate() {
+        HotelManager hotel = new HotelManager();
+        Room room = hotel.findRoom("101").orElseThrow();
+        hotel.createReservation(room, "Kevin", "0812", null, BASE, 2, 2);
+
+        Assert.equals("taken on the first night", 1, hotel.getBookedCount(BASE));
+        Assert.equals("taken on the second night", 1, hotel.getBookedCount(BASE.plusDays(1)));
+        Assert.equals("free again on departure day", 0, hotel.getBookedCount(BASE.plusDays(2)));
+        Assert.equals("free the day before", 0, hotel.getBookedCount(BASE.minusDays(1)));
+
+        Assert.equals("available on a booked night", 31, hotel.getFreeCount(BASE));
+        Assert.equals("available on a free night", 32, hotel.getFreeCount(BASE.plusDays(5)));
+        Assert.equals("occupancy rate on a booked night", 100.0 / 32, hotel.getOccupancyRate(BASE));
+        Assert.equals("occupancy rate on a free night", 0.0, hotel.getOccupancyRate(BASE.plusDays(5)));
+    }
+
+    /** A room held by a reservation is just as unavailable as one with a guest in it. */
+    private static void occupancyCountsReservationsAndGuestsAlike() {
+        HotelManager hotel = new HotelManager();
+        LocalDate today = LocalDate.now();
+        hotel.createBooking(hotel.findRoom("101").orElseThrow(), "Kevin", "0812", null, 1, 1);
+        hotel.createReservation(hotel.findRoom("102").orElseThrow(), "Rani", "0813", null, today, 1, 1);
+
+        Assert.equals("both rooms counted today", 2, hotel.getBookedCount(today));
+        Assert.equals("only the arrival is physically in-house", 1, hotel.getOccupiedCount());
+    }
+
+    /** The dashboard reads these, so they must answer for a date, not just for now. */
+    private static void countsFollowTheChosenDate() {
+        HotelManager hotel = new HotelManager();
+        Room room = hotel.findRoom("101").orElseThrow();
+        hotel.createReservation(room, "Kevin", "0812", null, BASE, 2, 2);
+
+        Assert.equals("booked on the arrival date", 1, hotel.getBookedCount(BASE));
+        Assert.equals("free on the arrival date", 31, hotel.getFreeCount(BASE));
+        Assert.equals("booked the night after", 1, hotel.getBookedCount(BASE.plusDays(1)));
+        Assert.equals("free again on departure day", 0, hotel.getBookedCount(BASE.plusDays(2)));
+        Assert.equals("nothing booked a week earlier", 0, hotel.getBookedCount(BASE.minusDays(7)));
+        Assert.equals("occupancy on arrival", 3.125, hotel.getOccupancyRate(BASE));
+        Assert.equals("arrivals on the day", 1, hotel.getArrivalsOn(BASE));
+        Assert.equals("no arrivals mid-stay", 0, hotel.getArrivalsOn(BASE.plusDays(1)));
     }
 
     private static void collectionsAreNotMutableByCallers() {

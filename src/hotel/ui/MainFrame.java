@@ -1,11 +1,9 @@
 package hotel.ui;
-
 import hotel.model.Booking;
 import hotel.model.BookingStatus;
 import hotel.model.Room;
 import hotel.model.StaySegment;
 import hotel.service.HotelManager;
-
 import javax.swing.BorderFactory;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
@@ -18,6 +16,7 @@ import javax.swing.JRadioButton;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.JSplitPane;
+import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.SpinnerNumberModel;
@@ -42,11 +41,14 @@ import java.util.Optional;
 @SuppressWarnings("serial") // Swing components are never actually serialised here.
 public final class MainFrame extends JFrame {
     private static final int MAX_EXTRA_NIGHTS = 14;
+    private static final String DETACH_LABEL = "Open in separate window";
+    private static final String CLOSE_LABEL = "Close and return to tabs";
     private static final DateTimeFormatter DATE_LABEL = DateTimeFormatter.ofPattern("EEE, dd MMM yyyy");
 
     private final HotelManager hotelManager = new HotelManager();
     private final Map<Room, JButton> roomButtons = new LinkedHashMap<>();
     private final NumberFormat rupiah = UiTheme.rupiahFormat();
+    private final NumberFormat plainAmount = UiTheme.plainAmountFormat();
 
     private final JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
     private final JPanel gridPanel = new JPanel(new GridLayout(0, 4, 12, 12));
@@ -71,6 +73,10 @@ public final class MainFrame extends JFrame {
     private final JButton todayButton = UiTheme.actionButton("Today", UiTheme.ACTION_CANCEL);
     private final JSpinner quickNightsSpinner = new JSpinner(new SpinnerNumberModel(1, 1, 30, 1));
     private final JSpinner quickGuestsSpinner = new JSpinner(new SpinnerNumberModel(1, 1, maxRoomCapacity(), 1));
+
+    private final JTabbedPane infoTabs = new JTabbedPane();
+    private final Map<String, JFrame> detachedWindows = new LinkedHashMap<>();
+    private final Map<String, JButton> detachButtons = new LinkedHashMap<>();
 
     private final DefaultTableModel bookingTableModel;
     private final JTable bookingTable;
@@ -189,7 +195,13 @@ public final class MainFrame extends JFrame {
         filterPanel.add(row2);
         filterPanel.add(legend);
 
-        JScrollPane gridScroll = new JScrollPane(gridPanel);
+        // GridLayout stretches its cells to fill, so a filter matching one room used to
+        // produce a single full-height tile. Pinning the grid north keeps tile size fixed.
+        JPanel gridHolder = new JPanel(new BorderLayout());
+        gridHolder.setOpaque(false);
+        gridHolder.add(gridPanel, BorderLayout.NORTH);
+
+        JScrollPane gridScroll = new JScrollPane(gridHolder);
         gridScroll.setBorder(BorderFactory.createTitledBorder("Room Status Grid"));
         gridScroll.getVerticalScrollBar().setUnitIncrement(16);
 
@@ -209,20 +221,14 @@ public final class MainFrame extends JFrame {
         projectedRevenueLabel.setFont(UiTheme.STAT_MONEY);
         realizedRevenueLabel.setFont(UiTheme.STAT_MONEY);
         reservedValueLabel.setFont(UiTheme.STAT_MONEY);
-        top.add(UiTheme.statCard("Available Rooms", availableLabel));
-        top.add(UiTheme.statCard("Occupied Rooms", occupiedLabel));
-        top.add(UiTheme.statCard("Occupancy", occupancyLabel));
-        top.add(UiTheme.statCard("Reservations", reservedLabel));
-        top.add(UiTheme.statCard("In-House", projectedRevenueLabel));
-        top.add(UiTheme.statCard("Checked Out", realizedRevenueLabel));
-        top.add(UiTheme.statCard("Booked Ahead", reservedValueLabel));
+        top.add(UiTheme.statCard("Free (on date)", availableLabel));
+        top.add(UiTheme.statCard("Booked (on date)", occupiedLabel));
+        top.add(UiTheme.statCard("Occupancy (on date)", occupancyLabel));
+        top.add(UiTheme.statCard("Arrivals (on date)", reservedLabel));
+        top.add(UiTheme.statCard("In-House (Rp)", projectedRevenueLabel));
+        top.add(UiTheme.statCard("Checked Out (Rp)", realizedRevenueLabel));
+        top.add(UiTheme.statCard("Booked Ahead (Rp)", reservedValueLabel));
         top.add(UiTheme.statCard("Check-outs", checkedOutLabel));
-
-        JPanel center = new JPanel(new GridLayout(2, 1, 12, 12));
-        center.setOpaque(false);
-
-        JPanel detailsPanel = new JPanel(new BorderLayout(8, 8));
-        detailsPanel.setOpaque(false);
 
         selectedRoomLabel.setFont(UiTheme.SECTION);
 
@@ -232,20 +238,23 @@ public final class MainFrame extends JFrame {
         detailsArea.setFont(UiTheme.BODY);
         detailsArea.setText("Click a room to view guest information, rate, and current bill details.");
 
+        JPanel detailsPanel = new JPanel(new BorderLayout(8, 8));
+        detailsPanel.setOpaque(false);
         detailsPanel.add(selectedRoomLabel, BorderLayout.NORTH);
         detailsPanel.add(new JScrollPane(detailsArea), BorderLayout.CENTER);
+        detailsPanel.add(buildDetachBar("Room Details", detailsPanel), BorderLayout.SOUTH);
 
         JPanel historyPanel = new JPanel(new BorderLayout(8, 8));
         historyPanel.setOpaque(false);
-
-        JLabel historyLabel = new JLabel("Booking History Table");
-        historyLabel.setFont(UiTheme.SECTION);
-
-        historyPanel.add(historyLabel, BorderLayout.NORTH);
         historyPanel.add(new JScrollPane(bookingTable), BorderLayout.CENTER);
+        historyPanel.add(buildDetachBar("Booking History", historyPanel), BorderLayout.SOUTH);
 
-        center.add(detailsPanel);
-        center.add(historyPanel);
+        infoTabs.addTab("Room Details", detailsPanel);
+        infoTabs.addTab("Booking History", historyPanel);
+
+        JPanel center = new JPanel(new BorderLayout());
+        center.setOpaque(false);
+        center.add(infoTabs, BorderLayout.CENTER);
 
         JPanel actions = new JPanel(new GridLayout(3, 2, 10, 10));
         actions.setOpaque(false);
@@ -260,6 +269,96 @@ public final class MainFrame extends JFrame {
         panel.add(center, BorderLayout.CENTER);
         panel.add(actions, BorderLayout.SOUTH);
         return panel;
+    }
+
+    /**
+     * A small "open in its own window" control for a tab. Handy when the desk has a
+     * second monitor, or when the booking table needs more room than the tab allows.
+     */
+    private JPanel buildDetachBar(String title, JPanel content) {
+        JPanel bar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        bar.setOpaque(false);
+
+        JButton toggle = new JButton(DETACH_LABEL);
+        toggle.setFont(UiTheme.CAPTION);
+        toggle.setFocusPainted(false);
+        // One button, two jobs: it detaches while docked and closes while floating.
+        toggle.addActionListener(e -> {
+            JFrame window = detachedWindows.get(title);
+            if (window == null) {
+                detachTab(title, content);
+            } else {
+                window.dispose();   // fires windowClosed, which re-docks the panel
+            }
+        });
+        detachButtons.put(title, toggle);
+
+        bar.add(toggle);
+        return bar;
+    }
+
+    private void setDetachButtonLabel(String title, String label) {
+        JButton button = detachButtons.get(title);
+        if (button != null) {
+            button.setText(label);
+        }
+    }
+
+    /** Moves a tab's panel into its own window; closing that window puts it back. */
+    private void detachTab(String title, JPanel content) {
+        JFrame existing = detachedWindows.get(title);
+        if (existing != null) {
+            existing.toFront();
+            return;
+        }
+
+        int tabIndex = infoTabs.indexOfComponent(content);
+        if (tabIndex >= 0) {
+            infoTabs.removeTabAt(tabIndex);
+        }
+
+        JFrame window = new JFrame(title + " - Hotel Management Software");
+        window.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        window.setSize(640, 420);
+        window.setLocationRelativeTo(this);
+        window.setContentPane(content);
+        window.addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowClosed(java.awt.event.WindowEvent event) {
+                detachedWindows.remove(title);
+                reattachTab(title, content);
+            }
+        });
+        detachedWindows.put(title, window);
+        setDetachButtonLabel(title, CLOSE_LABEL);
+        window.setVisible(true);
+        showEmptyTabHint();
+    }
+
+    /** Restores a detached panel, keeping Room Details ahead of Booking History. */
+    private void reattachTab(String title, JPanel content) {
+        setDetachButtonLabel(title, DETACH_LABEL);
+        removeEmptyTabHint();
+        int insertAt = "Room Details".equals(title) ? 0 : infoTabs.getTabCount();
+        infoTabs.insertTab(title, null, content, null, Math.min(insertAt, infoTabs.getTabCount()));
+        infoTabs.setSelectedComponent(content);
+        revalidate();
+        repaint();
+    }
+
+    private void showEmptyTabHint() {
+        if (infoTabs.getTabCount() == 0) {
+            JLabel hint = new JLabel("Both panels are open in separate windows.", SwingConstants.CENTER);
+            hint.setForeground(UiTheme.MUTED_TEXT);
+            infoTabs.addTab("Panels", hint);
+        }
+    }
+
+    private void removeEmptyTabHint() {
+        int hintIndex = infoTabs.indexOfTab("Panels");
+        if (hintIndex >= 0) {
+            infoTabs.removeTabAt(hintIndex);
+        }
     }
 
     private JButton buildActionButton(String text, Color color, Runnable action) {
@@ -656,15 +755,23 @@ public final class MainFrame extends JFrame {
 
     private void refreshDashboard() {
         updateRoomColors();
-        availableLabel.setText(String.valueOf(hotelManager.getAvailableCount()));
-        occupiedLabel.setText(String.valueOf(hotelManager.getOccupiedCount()));
-        occupancyLabel.setText(String.format("%.0f%%", hotelManager.getOccupancyRate()));
-        projectedRevenueLabel.setText(rupiah.format(hotelManager.getProjectedRevenue()));
-        realizedRevenueLabel.setText(rupiah.format(hotelManager.getRealizedRevenue()));
+        LocalDate viewed = getViewedDate();
+        availableLabel.setText(String.valueOf(hotelManager.getFreeCount(viewed)));
+        occupiedLabel.setText(String.valueOf(hotelManager.getBookedCount(viewed)));
+        occupancyLabel.setText(String.format("%.0f%%", hotelManager.getOccupancyRate(viewed)));
+        reservedLabel.setText(String.valueOf(hotelManager.getArrivalsOn(viewed)));
         checkedOutLabel.setText(String.valueOf(hotelManager.getCheckedOutCount()));
-        reservedLabel.setText(String.valueOf(hotelManager.getReservedCount()));
-        reservedValueLabel.setText(rupiah.format(hotelManager.getReservedValue()));
+
+        setMoney(projectedRevenueLabel, hotelManager.getProjectedRevenue());
+        setMoney(realizedRevenueLabel, hotelManager.getRealizedRevenue());
+        setMoney(reservedValueLabel, hotelManager.getReservedValue());
         refreshBookingTable();
+    }
+
+    /** Card values drop the "Rp" prefix, which lives in the title, so long amounts fit. */
+    private void setMoney(JLabel label, double amount) {
+        label.setText(plainAmount.format(amount));
+        label.setToolTipText(rupiah.format(amount));
     }
 
     private void refreshBookingTable() {
