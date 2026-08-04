@@ -15,24 +15,24 @@ repositories {
     mavenCentral()
 }
 
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
 application {
     mainClass = 'hotel.Main'
 }
 
-// The ledger is written beside the project rather than inside build/.
+tasks.named('test') {
+    useJUnitPlatform()
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+        exceptionFormat 'full'
+    }
+}
+
 tasks.named('run') {
     workingDir = rootDir
-}
-
-// The suite is hand-rolled rather than JUnit, so it runs as a plain Java program.
-// Converting it to JUnit is a separate change; this keeps the build green meanwhile.
-tasks.register('runTests', JavaExec) {
-    group = 'verification'
-    description = 'Runs the hotel test suite'
-    classpath = sourceSets.test.runtimeClasspath
-    mainClass = 'hotel.test.AllTests'
-}
-
-tasks.named('check') {
-    dependsOn 'runTests'
 }

@@ -4,226 +4,206 @@ import hotel.model.Booking;
 import hotel.model.Room;
 import hotel.service.HotelManager;
 
+import org.junit.jupiter.api.Test;
+
 import java.time.LocalDate;
 
-public final class AvailabilityTests {
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+class AvailabilityTests {
     private static final LocalDate BASE = LocalDate.of(2026, 3, 10);
 
-    public static void main(String[] args) {
-        run();
-        Assert.printSummary();
-        if (Assert.hasFailures()) {
-            System.exit(1);
-        }
-    }
-
-    static void run() {
-        System.out.println("\n-- availability --");
-        overlapBlocksTheRoom();
-        backToBackStaysAreFine();
-        aStayInsideAnotherIsBlocked();
-        aStaySwallowingAnotherIsBlocked();
-        departureIsExclusive();
-        otherRoomsAreUnaffected();
-        rejectsBackwardsDateRange();
-        availableRoomsShrinkWhenBooked();
-
-        rejectsPartyLargerThanRoom();
-        rejectsDoubleBooking();
-
-        reservationLeavesTheRoomPhysicallyFree();
-        checkingInOccupiesTheRoom();
-        cannotCheckInTwice();
-        cannotCheckOutTwice();
-        cancellingFreesTheDates();
-        cannotCancelAfterArrival();
-
-        extendIsBlockedByTheNextArrival();
-        upgradeIsBlockedByAFutureReservation();
-        upgradeOptionsAreEmptyForFreeRoom();
-        upgradeOptionsExcludeTooSmallRooms();
-        cannotUpgradeIntoTheSameRoom();
-
-        occupancyIsCountedPerDate();
-        occupancyCountsReservationsAndGuestsAlike();
-
-        countsFollowTheChosenDate();
-        reservationCanBeExtendedBeforeArrival();
-        reservationCanBeMovedBeforeArrival();
-        movingAReservationLeavesRoomsUntouched();
-        upgradeOptionsSkipRoomsBookedLater();
-        finishedBookingsCannotBeChanged();
-        collectionsAreNotMutableByCallers();
-    }
 
     // ------------------------------------------------------- overlap boundaries
 
     /** 10th-13th against 12th-15th: the 12th is shared, so it clashes. */
-    private static void overlapBlocksTheRoom() {
+    @Test
+    void overlapBlocksTheRoom() {
         HotelManager hotel = new HotelManager();
         Room room = hotel.findRoom("101").orElseThrow();
         hotel.createReservation(room, "Kevin", "0812", null, BASE, 3, 2);
 
-        Assert.isFalse("overlapping range unavailable", hotel.isAvailable(room, BASE.plusDays(2), BASE.plusDays(5)));
-        Assert.throwsError("overlapping reservation rejected",
-                () -> hotel.createReservation(room, "Rani", "0813", null, BASE.plusDays(2), 3, 1));
-        Assert.isFalse("identical range unavailable", hotel.isAvailable(room, BASE, BASE.plusDays(3)));
+        assertFalse(hotel.isAvailable(room, BASE.plusDays(2), BASE.plusDays(5)), "overlapping range unavailable");
+        assertThrows(RuntimeException.class,
+                () -> hotel.createReservation(room, "Rani", "0813", null, BASE.plusDays(2), 3, 1),
+                "overlapping reservation rejected");
+        assertFalse(hotel.isAvailable(room, BASE, BASE.plusDays(3)), "identical range unavailable");
     }
 
     /** The case everyone gets wrong: one guest leaves the morning another arrives. */
-    private static void backToBackStaysAreFine() {
+    @Test
+    void backToBackStaysAreFine() {
         HotelManager hotel = new HotelManager();
         Room room = hotel.findRoom("101").orElseThrow();
         Booking first = hotel.createReservation(room, "Kevin", "0812", null, BASE, 3, 2);
 
-        Assert.equals("departure date", BASE.plusDays(3), first.getDepartureDate());
-        Assert.isTrue("arrival on the departure day is free",
-                hotel.isAvailable(room, BASE.plusDays(3), BASE.plusDays(5)));
+        assertEquals(BASE.plusDays(3), first.getDepartureDate(), "departure date");
+        assertTrue(hotel.isAvailable(room, BASE.plusDays(3), BASE.plusDays(5)),
+                "arrival on the departure day is free");
         hotel.createReservation(room, "Rani", "0813", null, BASE.plusDays(3), 2, 1);
-        Assert.equals("both bookings kept", 2, hotel.getBookings().size());
+        assertEquals(2, hotel.getBookings().size(), "both bookings kept");
     }
 
-    private static void aStayInsideAnotherIsBlocked() {
+    @Test
+    void aStayInsideAnotherIsBlocked() {
         HotelManager hotel = new HotelManager();
         Room room = hotel.findRoom("101").orElseThrow();
         hotel.createReservation(room, "Kevin", "0812", null, BASE, 7, 2);
-        Assert.isFalse("contained range unavailable",
-                hotel.isAvailable(room, BASE.plusDays(2), BASE.plusDays(4)));
+        assertFalse(hotel.isAvailable(room, BASE.plusDays(2), BASE.plusDays(4)), "contained range unavailable");
     }
 
-    private static void aStaySwallowingAnotherIsBlocked() {
+    @Test
+    void aStaySwallowingAnotherIsBlocked() {
         HotelManager hotel = new HotelManager();
         Room room = hotel.findRoom("101").orElseThrow();
         hotel.createReservation(room, "Kevin", "0812", null, BASE.plusDays(2), 2, 2);
-        Assert.isFalse("enclosing range unavailable", hotel.isAvailable(room, BASE, BASE.plusDays(7)));
+        assertFalse(hotel.isAvailable(room, BASE, BASE.plusDays(7)), "enclosing range unavailable");
     }
 
     /** One night on the 10th occupies the 10th only; the 11th is someone else's. */
-    private static void departureIsExclusive() {
+    @Test
+    void departureIsExclusive() {
         HotelManager hotel = new HotelManager();
         Room room = hotel.findRoom("101").orElseThrow();
         Booking booking = hotel.createReservation(room, "Kevin", "0812", null, BASE, 1, 1);
 
-        Assert.equals("one-night departure", BASE.plusDays(1), booking.getDepartureDate());
-        Assert.isTrue("the night itself is taken", booking.overlaps(BASE, BASE.plusDays(1)));
-        Assert.isFalse("the next night is not", booking.overlaps(BASE.plusDays(1), BASE.plusDays(2)));
+        assertEquals(BASE.plusDays(1), booking.getDepartureDate(), "one-night departure");
+        assertTrue(booking.overlaps(BASE, BASE.plusDays(1)), "the night itself is taken");
+        assertFalse(booking.overlaps(BASE.plusDays(1), BASE.plusDays(2)), "the next night is not");
     }
 
-    private static void otherRoomsAreUnaffected() {
+    @Test
+    void otherRoomsAreUnaffected() {
         HotelManager hotel = new HotelManager();
         Room booked = hotel.findRoom("101").orElseThrow();
         Room free = hotel.findRoom("102").orElseThrow();
         hotel.createReservation(booked, "Kevin", "0812", null, BASE, 3, 2);
-        Assert.isTrue("neighbouring room still free", hotel.isAvailable(free, BASE, BASE.plusDays(3)));
+        assertTrue(hotel.isAvailable(free, BASE, BASE.plusDays(3)), "neighbouring room still free");
     }
 
-    private static void rejectsBackwardsDateRange() {
+    @Test
+    void rejectsBackwardsDateRange() {
         HotelManager hotel = new HotelManager();
         Room room = hotel.findRoom("101").orElseThrow();
-        Assert.throwsError("departure before arrival", () -> hotel.isAvailable(room, BASE.plusDays(3), BASE));
-        Assert.throwsError("zero-length range", () -> hotel.isAvailable(room, BASE, BASE));
+        assertThrows(RuntimeException.class,
+                () -> hotel.isAvailable(room, BASE.plusDays(3), BASE), "departure before arrival");
+        assertThrows(RuntimeException.class, () -> hotel.isAvailable(room, BASE, BASE), "zero-length range");
     }
 
-    private static void availableRoomsShrinkWhenBooked() {
+    @Test
+    void availableRoomsShrinkWhenBooked() {
         HotelManager hotel = new HotelManager();
         Room room = hotel.findRoom("101").orElseThrow();
         int before = hotel.getAvailableRooms(BASE, BASE.plusDays(2)).size();
         hotel.createReservation(room, "Kevin", "0812", null, BASE, 2, 2);
 
-        Assert.equals("one fewer room for those dates", before - 1,
-                hotel.getAvailableRooms(BASE, BASE.plusDays(2)).size());
-        Assert.equals("other dates unaffected", before,
-                hotel.getAvailableRooms(BASE.plusDays(5), BASE.plusDays(6)).size());
+        assertEquals(before - 1, hotel.getAvailableRooms(BASE, BASE.plusDays(2)).size(),
+                "one fewer room for those dates");
+        assertEquals(before, hotel.getAvailableRooms(BASE.plusDays(5), BASE.plusDays(6)).size(),
+                "other dates unaffected");
     }
 
     // ------------------------------------------------------------- room fit
 
-    private static void rejectsPartyLargerThanRoom() {
+    @Test
+    void rejectsPartyLargerThanRoom() {
         HotelManager hotel = new HotelManager();
         Room studio = hotel.findRoom("101").orElseThrow();
-        Assert.throwsError("studio cannot hold 4 guests",
-                () -> hotel.createBooking(studio, "Kevin", "0812", null, 2, 4));
-        Assert.isFalse("failed booking leaves room free", studio.isOccupied());
+        assertThrows(RuntimeException.class,
+                () -> hotel.createBooking(studio, "Kevin", "0812", null, 2, 4), "studio cannot hold 4 guests");
+        assertFalse(studio.isOccupied(), "failed booking leaves room free");
     }
 
-    private static void rejectsDoubleBooking() {
+    @Test
+    void rejectsDoubleBooking() {
         HotelManager hotel = new HotelManager();
         Room studio = hotel.findRoom("101").orElseThrow();
         hotel.createBooking(studio, "Kevin", "0812", null, 2, 2);
-        Assert.throwsError("second booking on the same room",
-                () -> hotel.createBooking(studio, "Rani", "0813", null, 1, 1));
+        assertThrows(RuntimeException.class,
+                () -> hotel.createBooking(studio, "Rani", "0813", null, 1, 1), "second booking on the same room");
     }
 
     // --------------------------------------------------------------- lifecycle
 
-    private static void reservationLeavesTheRoomPhysicallyFree() {
+    @Test
+    void reservationLeavesTheRoomPhysicallyFree() {
         HotelManager hotel = new HotelManager();
         Room room = hotel.findRoom("101").orElseThrow();
         hotel.createReservation(room, "Kevin", "0812", null, BASE, 3, 2);
 
-        Assert.isFalse("nobody is in the room yet", room.isOccupied());
-        Assert.equals("counted as available", 32, hotel.getAvailableCount());
-        Assert.equals("counted as reserved", 1, hotel.getReservedCount());
+        assertFalse(room.isOccupied(), "nobody is in the room yet");
+        assertEquals(32, hotel.getAvailableCount(), "counted as available");
+        assertEquals(1, hotel.getReservedCount(), "counted as reserved");
     }
 
-    private static void checkingInOccupiesTheRoom() {
+    @Test
+    void checkingInOccupiesTheRoom() {
         HotelManager hotel = new HotelManager();
         Room room = hotel.findRoom("101").orElseThrow();
         Booking booking = hotel.createReservation(room, "Kevin", "0812", null, LocalDate.now(), 2, 2);
         hotel.checkIn(booking);
 
-        Assert.isTrue("room occupied", room.isOccupied());
-        Assert.equals("status", "Checked in", booking.getStatus().getLabel());
-        Assert.equals("reserved count drops", 0, hotel.getReservedCount());
+        assertTrue(room.isOccupied(), "room occupied");
+        assertEquals("Checked in", booking.getStatus().getLabel(), "status");
+        assertEquals(0, hotel.getReservedCount(), "reserved count drops");
     }
 
-    private static void cannotCheckInTwice() {
+    @Test
+    void cannotCheckInTwice() {
         HotelManager hotel = new HotelManager();
         Room room = hotel.findRoom("101").orElseThrow();
         Booking booking = hotel.createBooking(room, "Kevin", "0812", null, 2, 2);
-        Assert.throwsError("second check-in", () -> hotel.checkIn(booking));
+        assertThrows(RuntimeException.class, () -> hotel.checkIn(booking), "second check-in");
     }
 
-    private static void cannotCheckOutTwice() {
+    @Test
+    void cannotCheckOutTwice() {
         HotelManager hotel = new HotelManager();
         Room room = hotel.findRoom("101").orElseThrow();
         hotel.createBooking(room, "Kevin", "0812", null, 1, 1);
         hotel.checkOut(room);
-        Assert.throwsError("second check-out", () -> hotel.checkOut(room));
-        Assert.isFalse("room released", room.isOccupied());
+        assertThrows(RuntimeException.class, () -> hotel.checkOut(room), "second check-out");
+        assertFalse(room.isOccupied(), "room released");
     }
 
-    private static void cancellingFreesTheDates() {
+    @Test
+    void cancellingFreesTheDates() {
         HotelManager hotel = new HotelManager();
         Room room = hotel.findRoom("101").orElseThrow();
         Booking booking = hotel.createReservation(room, "Kevin", "0812", null, BASE, 3, 2);
 
-        Assert.isFalse("held while reserved", hotel.isAvailable(room, BASE, BASE.plusDays(3)));
+        assertFalse(hotel.isAvailable(room, BASE, BASE.plusDays(3)), "held while reserved");
         hotel.cancelReservation(booking);
-        Assert.isTrue("released after cancelling", hotel.isAvailable(room, BASE, BASE.plusDays(3)));
-        Assert.equals("status", "Cancelled", booking.getStatus().getLabel());
+        assertTrue(hotel.isAvailable(room, BASE, BASE.plusDays(3)), "released after cancelling");
+        assertEquals("Cancelled", booking.getStatus().getLabel(), "status");
     }
 
-    private static void cannotCancelAfterArrival() {
+    @Test
+    void cannotCancelAfterArrival() {
         HotelManager hotel = new HotelManager();
         Room room = hotel.findRoom("101").orElseThrow();
         Booking booking = hotel.createBooking(room, "Kevin", "0812", null, 2, 2);
-        Assert.throwsError("cancel an in-house guest", () -> hotel.cancelReservation(booking));
+        assertThrows(RuntimeException.class, () -> hotel.cancelReservation(booking), "cancel an in-house guest");
     }
 
     // ----------------------------------------------------- changes to a stay
 
-    private static void extendIsBlockedByTheNextArrival() {
+    @Test
+    void extendIsBlockedByTheNextArrival() {
         HotelManager hotel = new HotelManager();
         Room room = hotel.findRoom("101").orElseThrow();
         Booking staying = hotel.createBooking(room, "Kevin", "0812", null, 2, 2);
         hotel.createReservation(room, "Rani", "0813", null, staying.getDepartureDate(), 2, 1);
 
-        Assert.throwsError("extend into someone else's booking", () -> hotel.extendStay(room, 2));
-        Assert.equals("nights unchanged after refusal", 2, staying.getNights());
+        assertThrows(RuntimeException.class, () -> hotel.extendStay(room, 2), "extend into someone else's booking");
+        assertEquals(2, staying.getNights(), "nights unchanged after refusal");
     }
 
-    private static void upgradeIsBlockedByAFutureReservation() {
+    @Test
+    void upgradeIsBlockedByAFutureReservation() {
         HotelManager hotel = new HotelManager();
         Room studio = hotel.findRoom("101").orElseThrow();
         Room suite = hotel.findRoom("301").orElseThrow();
@@ -231,153 +211,162 @@ public final class AvailabilityTests {
         hotel.createBooking(studio, "Kevin", "0812", null, 4, 2);
         hotel.createReservation(suite, "Rani", "0813", null, LocalDate.now().plusDays(1), 2, 2);
 
-        Assert.throwsError("upgrade into a room booked later", () -> hotel.upgradeBooking(studio, suite));
-        Assert.isFalse("suite not offered as an option",
-                hotel.getAvailableUpgradeOptions(studio).contains(suite));
+        assertThrows(RuntimeException.class,
+                () -> hotel.upgradeBooking(studio, suite), "upgrade into a room booked later");
+        assertFalse(hotel.getAvailableUpgradeOptions(studio).contains(suite), "suite not offered as an option");
     }
 
     /** Regression: this used to throw NullPointerException on a vacant room. */
-    private static void upgradeOptionsAreEmptyForFreeRoom() {
+    @Test
+    void upgradeOptionsAreEmptyForFreeRoom() {
         HotelManager hotel = new HotelManager();
         Room studio = hotel.findRoom("101").orElseThrow();
-        Assert.equals("no options for a free room", 0, hotel.getAvailableUpgradeOptions(studio).size());
-        Assert.equals("no options for null", 0, hotel.getAvailableUpgradeOptions(null).size());
+        assertEquals(0, hotel.getAvailableUpgradeOptions(studio).size(), "no options for a free room");
+        assertEquals(0, hotel.getAvailableUpgradeOptions(null).size(), "no options for null");
     }
 
-    private static void upgradeOptionsExcludeTooSmallRooms() {
+    @Test
+    void upgradeOptionsExcludeTooSmallRooms() {
         HotelManager hotel = new HotelManager();
         Room deluxe = hotel.findRoom("201").orElseThrow();
         hotel.createBooking(deluxe, "Kevin", "0812", null, 2, 3);
 
         java.util.List<Room> options = hotel.getAvailableUpgradeOptions(deluxe);
-        Assert.isTrue("upgrade options exist", !options.isEmpty());
-        Assert.isTrue("all options fit the party",
-                options.stream().allMatch(room -> room.getCapacity() >= 3));
-        Assert.isTrue("all options cost more",
-                options.stream().allMatch(room -> room.getNightlyRate() > deluxe.getNightlyRate()));
+        assertTrue(!options.isEmpty(), "upgrade options exist");
+        assertTrue(options.stream().allMatch(room -> room.getCapacity() >= 3), "all options fit the party");
+        assertTrue(options.stream().allMatch(room -> room.getNightlyRate() > deluxe.getNightlyRate()),
+                "all options cost more");
     }
 
-    private static void cannotUpgradeIntoTheSameRoom() {
+    @Test
+    void cannotUpgradeIntoTheSameRoom() {
         HotelManager hotel = new HotelManager();
         Room studio = hotel.findRoom("101").orElseThrow();
         hotel.createBooking(studio, "Kevin", "0812", null, 1, 1);
-        Assert.throwsError("upgrade into the same room", () -> hotel.upgradeBooking(studio, studio));
+        assertThrows(RuntimeException.class,
+                () -> hotel.upgradeBooking(studio, studio), "upgrade into the same room");
     }
 
     /** The dashboard asks "how full are we that night", not "who is here now". */
-    private static void occupancyIsCountedPerDate() {
+    @Test
+    void occupancyIsCountedPerDate() {
         HotelManager hotel = new HotelManager();
         Room room = hotel.findRoom("101").orElseThrow();
         hotel.createReservation(room, "Kevin", "0812", null, BASE, 2, 2);
 
-        Assert.equals("taken on the first night", 1, hotel.getBookedCount(BASE));
-        Assert.equals("taken on the second night", 1, hotel.getBookedCount(BASE.plusDays(1)));
-        Assert.equals("free again on departure day", 0, hotel.getBookedCount(BASE.plusDays(2)));
-        Assert.equals("free the day before", 0, hotel.getBookedCount(BASE.minusDays(1)));
+        assertEquals(1, hotel.getBookedCount(BASE), "taken on the first night");
+        assertEquals(1, hotel.getBookedCount(BASE.plusDays(1)), "taken on the second night");
+        assertEquals(0, hotel.getBookedCount(BASE.plusDays(2)), "free again on departure day");
+        assertEquals(0, hotel.getBookedCount(BASE.minusDays(1)), "free the day before");
 
-        Assert.equals("available on a booked night", 31, hotel.getFreeCount(BASE));
-        Assert.equals("available on a free night", 32, hotel.getFreeCount(BASE.plusDays(5)));
-        Assert.equals("occupancy rate on a booked night", 100.0 / 32, hotel.getOccupancyRate(BASE));
-        Assert.equals("occupancy rate on a free night", 0.0, hotel.getOccupancyRate(BASE.plusDays(5)));
+        assertEquals(31, hotel.getFreeCount(BASE), "available on a booked night");
+        assertEquals(32, hotel.getFreeCount(BASE.plusDays(5)), "available on a free night");
+        assertEquals(100.0 / 32, hotel.getOccupancyRate(BASE), "occupancy rate on a booked night");
+        assertEquals(0.0, hotel.getOccupancyRate(BASE.plusDays(5)), "occupancy rate on a free night");
     }
 
     /** A room held by a reservation is just as unavailable as one with a guest in it. */
-    private static void occupancyCountsReservationsAndGuestsAlike() {
+    @Test
+    void occupancyCountsReservationsAndGuestsAlike() {
         HotelManager hotel = new HotelManager();
         LocalDate today = LocalDate.now();
         hotel.createBooking(hotel.findRoom("101").orElseThrow(), "Kevin", "0812", null, 1, 1);
         hotel.createReservation(hotel.findRoom("102").orElseThrow(), "Rani", "0813", null, today, 1, 1);
 
-        Assert.equals("both rooms counted today", 2, hotel.getBookedCount(today));
-        Assert.equals("only the arrival is physically in-house", 1, hotel.getOccupiedCount());
+        assertEquals(2, hotel.getBookedCount(today), "both rooms counted today");
+        assertEquals(1, hotel.getOccupiedCount(), "only the arrival is physically in-house");
     }
 
     /** The dashboard reads these, so they must answer for a date, not just for now. */
-    private static void countsFollowTheChosenDate() {
+    @Test
+    void countsFollowTheChosenDate() {
         HotelManager hotel = new HotelManager();
         Room room = hotel.findRoom("101").orElseThrow();
         hotel.createReservation(room, "Kevin", "0812", null, BASE, 2, 2);
 
-        Assert.equals("booked on the arrival date", 1, hotel.getBookedCount(BASE));
-        Assert.equals("free on the arrival date", 31, hotel.getFreeCount(BASE));
-        Assert.equals("booked the night after", 1, hotel.getBookedCount(BASE.plusDays(1)));
-        Assert.equals("free again on departure day", 0, hotel.getBookedCount(BASE.plusDays(2)));
-        Assert.equals("nothing booked a week earlier", 0, hotel.getBookedCount(BASE.minusDays(7)));
-        Assert.equals("occupancy on arrival", 3.125, hotel.getOccupancyRate(BASE));
-        Assert.equals("arrivals on the day", 1, hotel.getArrivalsOn(BASE));
-        Assert.equals("no arrivals mid-stay", 0, hotel.getArrivalsOn(BASE.plusDays(1)));
+        assertEquals(1, hotel.getBookedCount(BASE), "booked on the arrival date");
+        assertEquals(31, hotel.getFreeCount(BASE), "free on the arrival date");
+        assertEquals(1, hotel.getBookedCount(BASE.plusDays(1)), "booked the night after");
+        assertEquals(0, hotel.getBookedCount(BASE.plusDays(2)), "free again on departure day");
+        assertEquals(0, hotel.getBookedCount(BASE.minusDays(7)), "nothing booked a week earlier");
+        assertEquals(3.125, hotel.getOccupancyRate(BASE), "occupancy on arrival");
+        assertEquals(1, hotel.getArrivalsOn(BASE), "arrivals on the day");
+        assertEquals(0, hotel.getArrivalsOn(BASE.plusDays(1)), "no arrivals mid-stay");
     }
 
     /** A guest ringing ahead to add a night should not need the booking cancelled. */
-    private static void reservationCanBeExtendedBeforeArrival() {
+    @Test
+    void reservationCanBeExtendedBeforeArrival() {
         HotelManager hotel = new HotelManager();
         Room room = hotel.findRoom("101").orElseThrow();
         Booking booking = hotel.createReservation(room, "Kevin", "0812", null, BASE, 2, 2);
 
         hotel.extendStay(booking, 3);
-        Assert.equals("nights after extending a reservation", 5, booking.getNights());
-        Assert.equals("departure moves out", BASE.plusDays(5), booking.getDepartureDate());
-        Assert.isFalse("still nobody in the room", room.isOccupied());
-        Assert.equals("still a reservation", "Reserved", booking.getStatus().getLabel());
+        assertEquals(5, booking.getNights(), "nights after extending a reservation");
+        assertEquals(BASE.plusDays(5), booking.getDepartureDate(), "departure moves out");
+        assertFalse(room.isOccupied(), "still nobody in the room");
+        assertEquals("Reserved", booking.getStatus().getLabel(), "still a reservation");
     }
 
-    private static void reservationCanBeMovedBeforeArrival() {
+    @Test
+    void reservationCanBeMovedBeforeArrival() {
         HotelManager hotel = new HotelManager();
         Room studio = hotel.findRoom("101").orElseThrow();
         Room suite = hotel.findRoom("301").orElseThrow();
         Booking booking = hotel.createReservation(studio, "Kevin", "0812", null, BASE, 2, 2);
 
         hotel.upgradeBooking(booking, suite);
-        Assert.equals("booking now points at the suite", suite, booking.getRoom());
-        Assert.isTrue("old room free for those dates", hotel.isAvailable(studio, BASE, BASE.plusDays(2)));
-        Assert.isFalse("new room held for those dates", hotel.isAvailable(suite, BASE, BASE.plusDays(2)));
-        Assert.equals("whole stay repriced, none of it stayed", 2 * 1_350_000.0, booking.getCurrentBill());
+        assertEquals(suite, booking.getRoom(), "booking now points at the suite");
+        assertTrue(hotel.isAvailable(studio, BASE, BASE.plusDays(2)), "old room free for those dates");
+        assertFalse(hotel.isAvailable(suite, BASE, BASE.plusDays(2)), "new room held for those dates");
+        assertEquals(2 * 1_350_000.0, booking.getCurrentBill(),
+                "whole stay repriced, none of it stayed");
     }
 
     /** Moving a reservation touches the ledger only; no guest is in a room to move. */
-    private static void movingAReservationLeavesRoomsUntouched() {
+    @Test
+    void movingAReservationLeavesRoomsUntouched() {
         HotelManager hotel = new HotelManager();
         Room studio = hotel.findRoom("101").orElseThrow();
         Room suite = hotel.findRoom("301").orElseThrow();
         Booking booking = hotel.createReservation(studio, "Kevin", "0812", null, BASE, 2, 2);
 
         hotel.upgradeBooking(booking, suite);
-        Assert.isFalse("old room not physically occupied", studio.isOccupied());
-        Assert.isFalse("new room not physically occupied", suite.isOccupied());
-        Assert.equals("hotel still shows every room free today", 32, hotel.getAvailableCount());
+        assertFalse(studio.isOccupied(), "old room not physically occupied");
+        assertFalse(suite.isOccupied(), "new room not physically occupied");
+        assertEquals(32, hotel.getAvailableCount(), "hotel still shows every room free today");
     }
 
-    private static void upgradeOptionsSkipRoomsBookedLater() {
+    @Test
+    void upgradeOptionsSkipRoomsBookedLater() {
         HotelManager hotel = new HotelManager();
         Room studio = hotel.findRoom("101").orElseThrow();
         Room suite = hotel.findRoom("301").orElseThrow();
         Booking booking = hotel.createReservation(studio, "Kevin", "0812", null, BASE, 3, 2);
         hotel.createReservation(suite, "Rani", "0813", null, BASE.plusDays(1), 1, 1);
 
-        Assert.isFalse("suite booked mid-stay is not offered",
-                hotel.getUpgradeOptionsFor(booking).contains(suite));
-        Assert.throwsError("and is refused if forced",
-                () -> hotel.upgradeBooking(booking, suite));
+        assertFalse(hotel.getUpgradeOptionsFor(booking).contains(suite), "suite booked mid-stay is not offered");
+        assertThrows(RuntimeException.class, () -> hotel.upgradeBooking(booking, suite), "and is refused if forced");
     }
 
-    private static void finishedBookingsCannotBeChanged() {
+    @Test
+    void finishedBookingsCannotBeChanged() {
         HotelManager hotel = new HotelManager();
         Room room = hotel.findRoom("101").orElseThrow();
         Booking booking = hotel.createBooking(room, "Kevin", "0812", null, 1, 1);
         hotel.checkOut(room);
 
-        Assert.throwsError("extend after check-out", () -> hotel.extendStay(booking, 1));
-        Assert.throwsError("move after check-out",
-                () -> hotel.upgradeBooking(booking, hotel.findRoom("301").orElseThrow()));
-        Assert.equals("no options for a closed booking", 0, hotel.getUpgradeOptionsFor(booking).size());
+        assertThrows(RuntimeException.class, () -> hotel.extendStay(booking, 1), "extend after check-out");
+        assertThrows(RuntimeException.class,
+                () -> hotel.upgradeBooking(booking, hotel.findRoom("301").orElseThrow()), "move after check-out");
+        assertEquals(0, hotel.getUpgradeOptionsFor(booking).size(), "no options for a closed booking");
     }
 
-    private static void collectionsAreNotMutableByCallers() {
+    @Test
+    void collectionsAreNotMutableByCallers() {
         HotelManager hotel = new HotelManager();
-        Assert.throwsError("bookings list is unmodifiable", () -> hotel.getBookings().clear());
-        Assert.throwsError("rooms list is unmodifiable", () -> hotel.getRooms().clear());
+        assertThrows(RuntimeException.class, () -> hotel.getBookings().clear(), "bookings list is unmodifiable");
+        assertThrows(RuntimeException.class, () -> hotel.getRooms().clear(), "rooms list is unmodifiable");
     }
 
-    private AvailabilityTests() {
-    }
 }
