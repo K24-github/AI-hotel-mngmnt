@@ -7,6 +7,7 @@ import hotel.model.Guest;
 import hotel.model.Room;
 import hotel.model.StudioRoom;
 import hotel.model.SuiteRoom;
+import hotel.store.BookingStore;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -26,6 +27,8 @@ public class HotelManager {
     private final List<Room> rooms = new ArrayList<>();
     private final List<Booking> bookings = new ArrayList<>();
 
+    private BookingStore store = BookingStore.none();
+
     public HotelManager() {
         seedRooms();
     }
@@ -41,6 +44,39 @@ public class HotelManager {
             rooms.add(new SuiteRoom(String.format("3%02d", i), 3));
         }
         rooms.sort(ROOM_ORDER);
+    }
+
+    // ------------------------------------------------------------ persistence
+
+    /**
+     * Attaches a store and replaces the ledger with whatever it holds. Rooms are
+     * re-occupied to match, so a guest who was in-house when the app closed is still
+     * in their room when it opens again.
+     */
+    public void useStore(BookingStore store) {
+        if (store == null) {
+            throw new IllegalArgumentException("A store is required.");
+        }
+        this.store = store;
+        rooms.forEach(Room::clearBooking);
+        bookings.clear();
+        bookings.addAll(store.load());
+        bookings.stream().filter(Booking::isActive).forEach(this::reoccupyRoom);
+    }
+
+    private void reoccupyRoom(Booking booking) {
+        Room room = booking.getRoom();
+        if (room.isOccupied()) {
+            System.err.println("Room " + room.getRoomNumber() + " has more than one guest checked into it; "
+                    + "booking " + booking.getBookingId() + " is left without a room.");
+            return;
+        }
+        room.assignBooking(booking);
+    }
+
+    /** Writes the ledger out through the attached store. Does nothing without one. */
+    public void persist() {
+        store.save(getBookings());
     }
 
     // ---------------------------------------------------------------- queries

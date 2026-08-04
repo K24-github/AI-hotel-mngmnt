@@ -15,6 +15,11 @@ public final class StaySegment {
         this.nights = nights;
     }
 
+    /** Rebuilds a segment read back from storage. */
+    public static StaySegment restore(Room room, int nights) {
+        return new StaySegment(room, nights);
+    }
+
     public Room getRoom() {
         return room;
     }

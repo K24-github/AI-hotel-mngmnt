@@ -52,6 +52,66 @@ public class Booking {
         this.segments.add(new StaySegment(room, nights));
     }
 
+    private Booking(String bookingId, Guest guest, int guestCount, LocalDate arrivalDate) {
+        if (bookingId == null || bookingId.isBlank()) {
+            throw new IllegalArgumentException("A booking id is required.");
+        }
+        if (guest == null) {
+            throw new IllegalArgumentException("A guest is required.");
+        }
+        if (arrivalDate == null) {
+            throw new IllegalArgumentException("Arrival date is required.");
+        }
+        if (guestCount <= 0) {
+            throw new IllegalArgumentException("Guest count must be greater than zero.");
+        }
+        this.bookingId = bookingId;
+        this.guest = guest;
+        this.guestCount = guestCount;
+        this.arrivalDate = arrivalDate;
+    }
+
+    /**
+     * Rebuilds a booking read back from storage exactly as it was stored, without
+     * replaying it through check-in, upgrade or check-out. A finished stay comes back
+     * finished, with its frozen bill intact.
+     */
+    public static Booking restore(String bookingId,
+                                  Guest guest,
+                                  int guestCount,
+                                  LocalDate arrivalDate,
+                                  List<StaySegment> segments,
+                                  BookingStatus status,
+                                  LocalDate checkedInOn,
+                                  LocalDate checkedOutOn,
+                                  Double finalBill) {
+        if (segments == null || segments.isEmpty()) {
+            throw new IllegalArgumentException("A booking needs at least one stay segment.");
+        }
+        if (segments.contains(null)) {
+            throw new IllegalArgumentException("Stay segments cannot be empty.");
+        }
+        if (status == null) {
+            throw new IllegalArgumentException("Booking status is required.");
+        }
+        Booking booking = new Booking(bookingId, guest, guestCount, arrivalDate);
+        booking.segments.addAll(segments);
+        booking.status = status;
+        booking.checkedInOn = checkedInOn;
+        booking.checkedOutOn = checkedOutOn;
+        booking.finalBill = finalBill;
+        return booking;
+    }
+
+    /**
+     * Moves the id counter past ids already handed out in an earlier run, so that a
+     * booking created after a restart cannot collide with a restored one. Never moves
+     * the counter backwards.
+     */
+    public static void seedSequence(int highestUsed) {
+        SEQUENCE.accumulateAndGet(highestUsed, Math::max);
+    }
+
     public String getBookingId() {
         return bookingId;
     }

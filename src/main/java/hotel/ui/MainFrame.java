@@ -4,6 +4,7 @@ import hotel.model.BookingStatus;
 import hotel.model.Room;
 import hotel.model.StaySegment;
 import hotel.service.HotelManager;
+import hotel.store.JsonBookingStore;
 import javax.swing.BorderFactory;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
@@ -28,6 +29,7 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.GridLayout;
+import java.nio.file.Path;
 import java.text.NumberFormat;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -86,6 +88,9 @@ public final class MainFrame extends JFrame {
 
     private Room selectedRoom;
 
+    /** The last write that failed, held back until the window closes. */
+    private RuntimeException lastSaveError;
+
     public MainFrame() {
         floorOptions = buildFloorOptions();
         floorFilterBox = new JComboBox<>(buildFloorLabels());
@@ -102,7 +107,14 @@ public final class MainFrame extends JFrame {
         bookingTable.setRowHeight(26);
 
         setTitle("Hotel Management Software");
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        // Closing is handled by hand so a ledger that will not save can be argued about first.
+        setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+        addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowClosing(java.awt.event.WindowEvent event) {
+                handleWindowClosing();
+            }
+        });
         setSize(1360, 820);
         setLocationRelativeTo(null);
 
@@ -127,6 +139,50 @@ public final class MainFrame extends JFrame {
         registerEvents();
         rebuildGrid();
         refreshDashboard();
+    }
+
+    // ------------------------------------------------------------ persistence
+
+    /** Attaches the on-disk ledger, loads whatever is in it, and shows it. */
+    public void openStore(Path dataFile) {
+        hotelManager.useStore(new JsonBookingStore(dataFile,
+                roomNumber -> hotelManager.findRoom(roomNumber).orElse(null)));
+        refreshAfterChange(null);
+    }
+
+    /**
+     * The change is already made and the clerk has been told it worked, so a failed
+     * write must not come back as an error dialog here: they would read it as the
+     * booking having failed. It goes to the log and is raised once on the way out.
+     */
+    private void saveQuietly() {
+        try {
+            hotelManager.persist();
+            lastSaveError = null;
+        } catch (RuntimeException ex) {
+            lastSaveError = ex;
+            System.err.println("Could not save the booking ledger: " + ex);
+        }
+    }
+
+    /** Last chance to save, and the only place a save failure is put to the clerk. */
+    private void handleWindowClosing() {
+        saveQuietly();
+        if (lastSaveError != null) {
+            int choice = JOptionPane.showConfirmDialog(
+                    this,
+                    "The booking ledger could not be saved:\n" + lastSaveError.getMessage()
+                            + "\n\nClose anyway? Everything since the last successful save will be lost.",
+                    "Save Failed",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.WARNING_MESSAGE
+            );
+            if (choice != JOptionPane.YES_OPTION) {
+                return;
+            }
+        }
+        dispose();
+        System.exit(0);
     }
 
     // ----------------------------------------------------------------- layout
@@ -779,7 +835,9 @@ public final class MainFrame extends JFrame {
             action.run();
         } catch (IllegalArgumentException | IllegalStateException ex) {
             showError(ex.getMessage());
+            return;
         }
+        saveQuietly();
     }
 
     // ------------------------------------------------------------- refresh
