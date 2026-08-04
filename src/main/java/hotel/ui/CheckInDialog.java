@@ -48,6 +48,18 @@ final class CheckInDialog {
                   LocalDate arrivalDate, int nights, int guestCount) {
     }
 
+    /**
+     * What the form opens with. Every field is optional because a prefill may come
+     * from a parsed sentence that only mentioned some of them.
+     */
+    record Prefill(String guestName, String phone, String notes,
+                   LocalDate arrivalDate, Integer nights, Integer guests, boolean breakfast) {
+
+        static Prefill of(LocalDate arrivalDate, Integer nights, Integer guests) {
+            return new Prefill(null, null, null, arrivalDate, nights, guests, false);
+        }
+    }
+
     private static final String[] PAYMENT_TYPES = {"Walk-in", "Transfer", "Card"};
     private static final int MAX_NIGHTS = 30;
     private static final int MAX_MONTHS_AHEAD = 12;
@@ -56,21 +68,21 @@ final class CheckInDialog {
     }
 
     static Optional<Result> show(Component parent, Room room, Mode mode,
-                                 LocalDate defaultArrival, int defaultNights, int defaultGuests,
-                                 DateField.DayStatusProvider arrivalStatus) {
-        JTextField guestNameField = new JTextField();
-        JTextField phoneField = new JTextField();
+                                 Prefill prefill, DateField.DayStatusProvider arrivalStatus) {
+        JTextField guestNameField = new JTextField(orEmpty(prefill.guestName()));
+        JTextField phoneField = new JTextField(orEmpty(prefill.phone()));
 
         JTextArea notesArea = new JTextArea(3, 20);
         notesArea.setLineWrap(true);
         notesArea.setWrapStyleWord(true);
+        notesArea.setText(orEmpty(prefill.notes()));
 
-        int nights = clamp(defaultNights, 1, MAX_NIGHTS);
-        int guests = clamp(defaultGuests, 1, room.getCapacity());
+        int nights = clamp(orDefault(prefill.nights(), 1), 1, MAX_NIGHTS);
+        int guests = clamp(orDefault(prefill.guests(), 1), 1, room.getCapacity());
 
         JSpinner nightsSpinner = new JSpinner(new SpinnerNumberModel(nights, 1, MAX_NIGHTS, 1));
         JSpinner guestsSpinner = new JSpinner(new SpinnerNumberModel(guests, 1, room.getCapacity(), 1));
-        LocalDate arrival = (defaultArrival == null) ? LocalDate.now() : defaultArrival;
+        LocalDate arrival = notBefore(prefill.arrivalDate(), LocalDate.now());
         DateField arrivalField = new DateField(arrival, LocalDate.now(),
                 LocalDate.now().plusMonths(MAX_MONTHS_AHEAD));
         arrivalField.setDayStatusProvider(arrivalStatus);
@@ -93,6 +105,7 @@ final class CheckInDialog {
         }
 
         JCheckBox breakfastCheck = new JCheckBox("Breakfast requested");
+        breakfastCheck.setSelected(prefill.breakfast());
 
         JPanel form = new JPanel();
         form.setBorder(new EmptyBorder(12, 12, 12, 12));
@@ -191,5 +204,17 @@ final class CheckInDialog {
 
     private static int clamp(int value, int min, int max) {
         return Math.max(min, Math.min(max, value));
+    }
+
+    private static String orEmpty(String value) {
+        return (value == null) ? "" : value;
+    }
+
+    private static int orDefault(Integer value, int fallback) {
+        return (value == null) ? fallback : value;
+    }
+
+    private static LocalDate notBefore(LocalDate value, LocalDate floor) {
+        return (value == null || value.isBefore(floor)) ? floor : value;
     }
 }

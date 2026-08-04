@@ -611,9 +611,9 @@ public final class MainFrame extends JFrame {
                 this,
                 selectedRoom,
                 CheckInDialog.Mode.WALK_IN,
-                LocalDate.now(),
-                (int) quickNightsSpinner.getValue(),
-                (int) quickGuestsSpinner.getValue(),
+                CheckInDialog.Prefill.of(LocalDate.now(),
+                        (int) quickNightsSpinner.getValue(),
+                        (int) quickGuestsSpinner.getValue()),
                 date -> statusOn(selectedRoom, date)
         );
         if (result.isEmpty()) {
@@ -644,9 +644,9 @@ public final class MainFrame extends JFrame {
                 this,
                 selectedRoom,
                 CheckInDialog.Mode.RESERVATION,
-                suggested,
-                (int) quickNightsSpinner.getValue(),
-                (int) quickGuestsSpinner.getValue(),
+                CheckInDialog.Prefill.of(suggested,
+                        (int) quickNightsSpinner.getValue(),
+                        (int) quickGuestsSpinner.getValue()),
                 date -> statusOn(selectedRoom, date)
         );
         if (result.isEmpty()) {
