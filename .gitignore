@@ -1,10 +1,16 @@
+# Gradle
+.gradle/
+build/
+
 # Compiled output
 out/
 bin/
-build/
 target/
 *.class
-*.jar
+
+# Application data
+hotel-bookings.json
+*.json.tmp
 
 # IntelliJ IDEA
 .idea/
@@ -18,7 +24,6 @@ target/
 # NetBeans
 nbproject/private/
 nbbuild/
-dist/
 
 # VS Code
 .vscode/

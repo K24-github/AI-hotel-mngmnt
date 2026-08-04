@@ -1,0 +1,38 @@
+plugins {
+    id 'application'
+}
+
+group = 'hotel'
+version = '1.0.0'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+application {
+    mainClass = 'hotel.Main'
+}
+
+// The ledger is written beside the project rather than inside build/.
+tasks.named('run') {
+    workingDir = rootDir
+}
+
+// The suite is hand-rolled rather than JUnit, so it runs as a plain Java program.
+// Converting it to JUnit is a separate change; this keeps the build green meanwhile.
+tasks.register('runTests', JavaExec) {
+    group = 'verification'
+    description = 'Runs the hotel test suite'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'hotel.test.AllTests'
+}
+
+tasks.named('check') {
+    dependsOn 'runTests'
+}

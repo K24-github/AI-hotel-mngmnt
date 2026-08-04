@@ -25,20 +25,18 @@ still in-house, and money already collected.
 You need Java 17 or newer. From the project folder:
 
 ```bash
-javac -d out $(find src -name '*.java')
-java -cp out hotel.Main
+./gradlew run
 ```
 
-There's a test suite with no external dependencies, so there's no JUnit jar to
-download:
+Tests:
 
 ```bash
-java -cp out hotel.test.HotelTests
+./gradlew runTests
 ```
 
-It exits with code 1 if something fails, so it works as a CI check as-is. If I add
-JUnit later I only have to rewrite the two helper methods at the bottom of the file,
-not the tests themselves.
+The suite is hand-rolled rather than JUnit, so it runs as a plain Java program and
+exits non-zero on failure. Nothing to install — the Gradle wrapper fetches what it
+needs on first run.
 
 ## Where this is going
 
