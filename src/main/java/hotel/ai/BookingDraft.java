@@ -1,11 +1,12 @@
 package hotel.ai;
 
-public record BookingDraft(String roomNumber, String tier, Integer guests, Integer nights,
-                           Boolean breakfast, String notes) {
+public record BookingDraft(String roomNumber, String tier, String guestName, Integer guests,
+                           Integer nights, Boolean breakfast, String notes) {
 
     public BookingDraft {
         roomNumber = trimmedOrNull(roomNumber);
         tier = trimmedOrNull(tier);
+        guestName = trimmedOrNull(guestName);
         notes = trimmedOrNull(notes);
     }
 
@@ -18,7 +19,7 @@ public record BookingDraft(String roomNumber, String tier, Integer guests, Integ
     }
 
     public boolean isEmpty() {
-        return roomNumber == null && tier == null && guests == null
+        return roomNumber == null && tier == null && guestName == null && guests == null
                 && nights == null && breakfast == null && notes == null;
     }
 
@@ -33,6 +34,7 @@ public record BookingDraft(String roomNumber, String tier, Integer guests, Integ
     public static final class Builder {
         private String roomNumber;
         private String tier;
+        private String guestName;
         private Integer guests;
         private Integer nights;
         private Boolean breakfast;
@@ -48,6 +50,11 @@ public record BookingDraft(String roomNumber, String tier, Integer guests, Integ
 
         public Builder tier(String tier) {
             this.tier = tier;
+            return this;
+        }
+
+        public Builder guestName(String guestName) {
+            this.guestName = guestName;
             return this;
         }
 
@@ -72,7 +79,7 @@ public record BookingDraft(String roomNumber, String tier, Integer guests, Integ
         }
 
         public BookingDraft build() {
-            return new BookingDraft(roomNumber, tier, guests, nights, breakfast, notes);
+            return new BookingDraft(roomNumber, tier, guestName, guests, nights, breakfast, notes);
         }
     }
 }

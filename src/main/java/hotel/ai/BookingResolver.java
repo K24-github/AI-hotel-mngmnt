@@ -4,6 +4,7 @@ import hotel.model.Room;
 import hotel.service.HotelManager;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 public final class BookingResolver {
@@ -16,7 +17,7 @@ public final class BookingResolver {
         this.hotel = hotel;
     }
 
-    public Optional<BookingProposal> resolve(BookingDraft draft) {
+    public Optional<BookingProposal> resolve(BookingDraft draft, String typedText) {
         if (draft == null || draft.isEmpty()) {
             return Optional.empty();
         }
@@ -47,8 +48,19 @@ public final class BookingResolver {
         }
 
         return Optional.of(new BookingProposal(
-                room, tier, atLeastOne(draft.nights()), guests,
+                room, tier,
+                appearingIn(draft.guestName(), typedText),
+                PhoneNumbers.findIn(typedText).orElse(null),
+                atLeastOne(draft.nights()), guests,
                 draft.wantsBreakfast(), draft.notes()));
+    }
+
+    /** A name the clerk never typed was invented, so it is dropped rather than trusted. */
+    private static String appearingIn(String name, String typedText) {
+        if (name == null || typedText == null) {
+            return null;
+        }
+        return typedText.toLowerCase(Locale.ROOT).contains(name.toLowerCase(Locale.ROOT)) ? name : null;
     }
 
     private String canonicalTier(String tierName) {
