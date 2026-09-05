@@ -1,5 +1,8 @@
 package hotel.ai;
 
+import java.util.Locale;
+import java.util.Set;
+
 public record BookingDraft(String roomNumber, String tier, String guestName, Integer guests,
                            Integer nights, Boolean breakfast) {
 
@@ -26,8 +29,14 @@ public record BookingDraft(String roomNumber, String tier, String guestName, Int
         return Boolean.TRUE.equals(breakfast);
     }
 
+    private static final Set<String> NOTHING_WORDS = Set.of("null", "none", "nil", "n/a", "-", "unknown");
+
     private static String trimmedOrNull(String value) {
-        return (value == null || value.isBlank()) ? null : value.trim();
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return NOTHING_WORDS.contains(trimmed.toLowerCase(Locale.ROOT)) ? null : trimmed;
     }
 
     public static final class Builder {

@@ -73,6 +73,30 @@ class BookingDraftTests {
     }
 
     @Test
+    void aModelWritingTheWordNullMeansNothing() {
+        BookingDraft draft = BookingDraft.builder()
+                .roomNumber("201")
+                .tier("null")
+                .guestName("null")
+                .build();
+
+        assertNull(draft.tier(), "the word null is not a tier");
+        assertNull(draft.guestName(), "the word null is not a name");
+        assertEquals("201", draft.roomNumber(), "the real field is untouched");
+    }
+
+    @Test
+    void otherWaysOfSayingNothingAreAlsoNothing() {
+        assertNull(BookingDraft.builder().tier("NULL").build().tier(), "upper case");
+        assertNull(BookingDraft.builder().tier("None").build().tier(), "none");
+        assertNull(BookingDraft.builder().tier("n/a").build().tier(), "n/a");
+        assertNull(BookingDraft.builder().guestName("-").build().guestName(), "a dash");
+        assertNull(BookingDraft.builder().guestName("unknown").build().guestName(), "unknown");
+        assertTrue(BookingDraft.builder().tier("null").guestName("none").build().isEmpty(),
+                "a draft of nothing-words is empty");
+    }
+
+    @Test
     void draftsWithTheSameFieldsAreEqual() {
         BookingDraft first = BookingDraft.builder().roomNumber("201").guests(2).nights(2).build();
         BookingDraft second = BookingDraft.builder().roomNumber(" 201 ").guests(2).nights(2).build();

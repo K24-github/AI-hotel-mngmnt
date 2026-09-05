@@ -96,6 +96,18 @@ class BookingResolverTests {
     }
 
     @Test
+    void aTierWrittenAsTheWordNullDoesNotSinkTheDraft() {
+        HotelManager hotel = new HotelManager();
+        BookingProposal proposal = resolve(hotel,
+                BookingDraft.builder().roomNumber("201").tier("null").guestName("null").nights(2).build(),
+                "2 nights 2 pax room 201 include breakfast").orElseThrow();
+
+        assertEquals(hotel.findRoom("201").orElseThrow(), proposal.room(), "the room still resolves");
+        assertNull(proposal.tier(), "no tier was really given");
+        assertNull(proposal.guestName(), "no name was really given");
+    }
+
+    @Test
     void anInventedTierRejectsTheDraft() {
         HotelManager hotel = new HotelManager();
         assertTrue(resolve(hotel, BookingDraft.builder().tier("Penthouse").build()).isEmpty(),
