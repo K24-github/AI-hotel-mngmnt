@@ -1,0 +1,789 @@
+{
+  "version": 1,
+  "rows": [
+    {
+      "sentence": "Make a booking at room 201 deluxe for 2 guests for 2 nights, breakfast included",
+      "note": "README example: full English sentence, every field present",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "201",
+        "tier": "Deluxe",
+        "guests": 2,
+        "nights": 2,
+        "breakfast": true
+      }
+    },
+    {
+      "sentence": "booking kamar 201 untuk 2 orang 2 malam",
+      "note": "README example: plain Indonesian, no tier and no breakfast",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "201",
+        "guests": 2,
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "2 nights 2 pax room 201 include breakfast",
+      "note": "README example: clipped English, numbers before the room",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "201",
+        "guests": 2,
+        "nights": 2,
+        "breakfast": true
+      }
+    },
+    {
+      "sentence": "201 deluxe, 2 tamu, 2 malam",
+      "note": "README example: comma-separated fragments, Indonesian units",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "201",
+        "tier": "Deluxe",
+        "guests": 2,
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "kamar deluxe untuk 2 malam",
+      "note": "Tier but no room number; the clerk picks the room",
+      "resolves": true,
+      "expected": {
+        "tier": "Deluxe",
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "booking kamar 205 untuk pak Budi, 2 malam",
+      "note": "Indonesian honorific in front of the name",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "205",
+        "guestName": "Budi",
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "kamar 108 2 malam 0812-3456-789",
+      "note": "Indonesian mobile; the phone is code's job, not the model's",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "108",
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "room 302 for Mr Tanaka, 3 nights, +81 90-1234-5678",
+      "note": "Foreign guest and an international number with a country code",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "302",
+        "guestName": "Tanaka",
+        "nights": 3
+      }
+    },
+    {
+      "sentence": "book kamar 301 suite for 4 tamu 3 nights",
+      "note": "Both languages inside one sentence",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "301",
+        "tier": "Suite",
+        "guests": 4,
+        "nights": 3
+      }
+    },
+    {
+      "sentence": "3 malam di 305, sarapan included",
+      "note": "Breakfast asked for in Indonesian, room number with no keyword",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "305",
+        "nights": 3,
+        "breakfast": true
+      }
+    },
+    {
+      "sentence": "kamar 210, 2 tamu, 1 malam, catatan: minta kamar yang tenang",
+      "note": "Marked note in Indonesian; the model never sees this text",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "210",
+        "guests": 2,
+        "nights": 1
+      }
+    },
+    {
+      "sentence": "kamar 203 2 malam, hp 0812-3456-789 atau 0857-1111-2222",
+      "note": "Two numbers offered; too ambiguous to prefill either",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "203",
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "room 101 for 4 people 2 nights",
+      "note": "Correctly parsed but impossible: a studio holds two",
+      "resolves": false,
+      "expected": {
+        "roomNumber": "101",
+        "guests": 4,
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "booking kamar 999 untuk 2 malam",
+      "note": "This hotel has no room 999, so nothing may reach the form",
+      "resolves": false,
+      "expected": {
+        "roomNumber": "999",
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "201 suite untuk 2 malam",
+      "note": "Room number and tier disagree; 201 is a deluxe",
+      "resolves": false,
+      "expected": {
+        "roomNumber": "201",
+        "tier": "Suite",
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "kmr 204 2mlm 2 org",
+      "note": "Abbreviated the way people actually type at the desk",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "204",
+        "guests": 2,
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "kamar 206 2 malam tanpa sarapan",
+      "note": "Breakfast explicitly declined in Indonesian, not merely unmentioned",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "206",
+        "nights": 2,
+        "breakfast": false
+      }
+    },
+    {
+      "sentence": "room 209 3 nights no breakfast",
+      "note": "Breakfast declined in English",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "209",
+        "nights": 3,
+        "breakfast": false
+      }
+    },
+    {
+      "sentence": "booking 110 1 malam, sarapan tidak usah",
+      "note": "Declined with a phrase rather than a negation word next to sarapan",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "110",
+        "nights": 1,
+        "breakfast": false
+      }
+    },
+    {
+      "sentence": "302 suite 2 nights without breakfast for 3 pax",
+      "note": "Declined breakfast with every other field also present",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "302",
+        "tier": "Suite",
+        "guests": 3,
+        "nights": 2,
+        "breakfast": false
+      }
+    },
+    {
+      "sentence": "kamar 207 2 malam pakai sarapan",
+      "note": "Breakfast requested with pakai rather than include",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "207",
+        "nights": 2,
+        "breakfast": true
+      }
+    },
+    {
+      "sentence": "room 111 1 night with breakfast",
+      "note": "Shortest possible English booking",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "111",
+        "nights": 1,
+        "breakfast": true
+      }
+    },
+    {
+      "sentence": "booking 304 3 malam include sarapan 4 orang",
+      "note": "Mixed keyword for breakfast, guests trailing at the end",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "304",
+        "guests": 4,
+        "nights": 3,
+        "breakfast": true
+      }
+    },
+    {
+      "sentence": "kamar studio untuk 1 malam",
+      "note": "Studio tier, which nothing else in the set covers",
+      "resolves": true,
+      "expected": {
+        "tier": "Studio",
+        "nights": 1
+      }
+    },
+    {
+      "sentence": "studio 105, 2 orang, 2 malam",
+      "note": "Studio at its exact capacity of two",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "105",
+        "tier": "Studio",
+        "guests": 2,
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "1 night studio for 1 guest",
+      "note": "Tier only, singular units in English",
+      "resolves": true,
+      "expected": {
+        "tier": "Studio",
+        "guests": 1,
+        "nights": 1
+      }
+    },
+    {
+      "sentence": "kamar 202 untuk dua malam",
+      "note": "Number spelled out in Indonesian rather than written as a digit",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "202",
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "booking kamar 103 dua orang tiga malam",
+      "note": "Both counts spelled out in Indonesian",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "103",
+        "guests": 2,
+        "nights": 3
+      }
+    },
+    {
+      "sentence": "room 208 for three nights",
+      "note": "Number spelled out in English",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "208",
+        "nights": 3
+      }
+    },
+    {
+      "sentence": "booking kamar 209 a/n Bapak Surya, 2 malam",
+      "note": "a/n is the usual shorthand for atas nama",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "209",
+        "guestName": "Surya",
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "kamar 106 untuk ibu Sari 1 malam",
+      "note": "Female honorific",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "106",
+        "guestName": "Sari",
+        "nights": 1
+      }
+    },
+    {
+      "sentence": "room 303 for Mr Anderson 2 nights",
+      "note": "Western surname with an English honorific",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "303",
+        "guestName": "Anderson",
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "atas nama Dewi, kamar 211, 3 malam",
+      "note": "Name first, room second",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "211",
+        "guestName": "Dewi",
+        "nights": 3
+      }
+    },
+    {
+      "sentence": "booking 107 pak Joko 2 malam 2 orang",
+      "note": "Name buried between the room and the counts",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "107",
+        "guestName": "Joko",
+        "guests": 2,
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "room 305 Ms Lim 3 nights 2 pax",
+      "note": "Very short surname, which is where substring matching is weakest",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "305",
+        "guestName": "Lim",
+        "guests": 2,
+        "nights": 3
+      }
+    },
+    {
+      "sentence": "kamar 212 utk bpk Hendra, 1 mlm",
+      "note": "Abbreviated honorific and units together",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "212",
+        "guestName": "Hendra",
+        "nights": 1
+      }
+    },
+    {
+      "sentence": "302 for Tanaka-san, 2 nights",
+      "note": "Japanese honorific attached to the name with a hyphen",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "302",
+        "guestName": "Tanaka",
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "booking a/n Siti Nurhaliza kamar 104 2 malam",
+      "note": "Two-word Indonesian name",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "104",
+        "guestName": "Siti Nurhaliza",
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "room 306 under the name Chen, 4 nights",
+      "note": "English equivalent of atas nama",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "306",
+        "guestName": "Chen",
+        "nights": 4
+      }
+    },
+    {
+      "sentence": "kamar 109 2 malam, note: minta lantai atas",
+      "note": "English marker in front of Indonesian note text",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "109",
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "room 202 3 nights, note: late check in around midnight",
+      "note": "Note containing a time reference that is not a count",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "202",
+        "nights": 3
+      }
+    },
+    {
+      "sentence": "booking 112 1 malam, catatan: tolong kamar dekat lift",
+      "note": "Note repeats the word kamar, which must not read as a second room",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "112",
+        "nights": 1
+      }
+    },
+    {
+      "sentence": "room 307 2 nights, notes: extra bed please",
+      "note": "The plural marker spelling",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "307",
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "kamar 203 2 malam, note: minta twin bed",
+      "note": "Bed preference, not a room or guest field",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "203",
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "308 3 nights, note: honeymoon, decorate the room",
+      "note": "Commas inside the note do not end it; it runs to the end of the input",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "308",
+        "nights": 3
+      }
+    },
+    {
+      "sentence": "kamar 102 1 malam, catatan: tamu lansia tolong dekat lobby",
+      "note": "Note contains tamu, which must not read as a guest count",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "102",
+        "nights": 1
+      }
+    },
+    {
+      "sentence": "kmr 205 2mlm",
+      "note": "Heavy abbreviation with no spaces around the unit",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "205",
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "204 2org 1mlm",
+      "note": "Nothing but numbers and glued-on units",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "204",
+        "guests": 2,
+        "nights": 1
+      }
+    },
+    {
+      "sentence": "bkg kmr 110 3 mlm 2 org",
+      "note": "Abbreviated verb as well as abbreviated units",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "110",
+        "guests": 2,
+        "nights": 3
+      }
+    },
+    {
+      "sentence": "rm 208, 2 nt, 2 px",
+      "note": "English abbreviations of the same shape",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "208",
+        "guests": 2,
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "kamar201 2malam",
+      "note": "Missing space between the word and the number",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "201",
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "   kamar 105   2 orang   2 malam  ",
+      "note": "Ragged spacing from someone typing quickly",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "105",
+        "guests": 2,
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "book kamar 206 for 2 malam, 2 guests",
+      "note": "English verb, Indonesian noun, English unit",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "206",
+        "guests": 2,
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "tolong booking room 111 satu malam",
+      "note": "Indonesian please with an English noun and a spelled-out count",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "111",
+        "nights": 1
+      }
+    },
+    {
+      "sentence": "checkin 301 today 2 nights 3 tamu",
+      "note": "Walk-in phrasing with a mixed unit",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "301",
+        "guests": 3,
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "kamar 210 deluxe 2 nights breakfast ya",
+      "note": "Indonesian tag question at the end of an English request",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "210",
+        "tier": "Deluxe",
+        "nights": 2,
+        "breakfast": true
+      }
+    },
+    {
+      "sentence": "kamar 204 08123456789",
+      "note": "Room number immediately before the phone, with nothing between",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "204"
+      }
+    },
+    {
+      "sentence": "room 303 3 nights +60 12-345 6789",
+      "note": "Malaysian number with a country code and mixed separators",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "303",
+        "nights": 3
+      }
+    },
+    {
+      "sentence": "booking 107 a/n Rina 0813 2222 3333 2 malam",
+      "note": "Count directly after the phone, which must not be absorbed into it",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "107",
+        "guestName": "Rina",
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "kamar 211, wa 0878-5555-1234, 2 malam",
+      "note": "Number introduced as a WhatsApp contact",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "211",
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "room 304 2 nights, contact +65 9123 4567, breakfast included",
+      "note": "Phone in the middle with fields on both sides",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "304",
+        "nights": 2,
+        "breakfast": true
+      }
+    },
+    {
+      "sentence": "kamar 102 1 malam",
+      "note": "Bare minimum: a room and a duration",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "102",
+        "nights": 1
+      }
+    },
+    {
+      "sentence": "room 212 2 nights 3 guests",
+      "note": "Deluxe at its exact capacity of three",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "212",
+        "guests": 3,
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "308 suite 5 orang 2 malam",
+      "note": "Suite at its exact capacity of five",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "308",
+        "tier": "Suite",
+        "guests": 5,
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "kamar 101 2 orang 1 malam sarapan",
+      "note": "Breakfast named with no verb attached to it",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "101",
+        "guests": 2,
+        "nights": 1,
+        "breakfast": true
+      }
+    },
+    {
+      "sentence": "booking suite untuk 4 orang 2 malam",
+      "note": "Tier without a room number, party well within the tier",
+      "resolves": true,
+      "expected": {
+        "tier": "Suite",
+        "guests": 4,
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "2 malam 2 orang",
+      "note": "No room and no tier; only the counts are prefillable",
+      "resolves": true,
+      "expected": {
+        "guests": 2,
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "kamar 113 2 malam",
+      "note": "Studio floor stops at 112, so 113 does not exist",
+      "resolves": false,
+      "expected": {
+        "roomNumber": "113",
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "room 213 for 2 nights",
+      "note": "Deluxe floor stops at 212",
+      "resolves": false,
+      "expected": {
+        "roomNumber": "213",
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "booking 309 3 malam",
+      "note": "Suite floor stops at 308",
+      "resolves": false,
+      "expected": {
+        "roomNumber": "309",
+        "nights": 3
+      }
+    },
+    {
+      "sentence": "kamar 105 untuk 3 orang 2 malam",
+      "note": "One over a studio's capacity",
+      "resolves": false,
+      "expected": {
+        "roomNumber": "105",
+        "guests": 3,
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "room 204 for 4 guests 2 nights",
+      "note": "One over a deluxe's capacity",
+      "resolves": false,
+      "expected": {
+        "roomNumber": "204",
+        "guests": 4,
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "booking studio 102 untuk 4 orang",
+      "note": "Tier and room agree, but the party does not fit either",
+      "resolves": false,
+      "expected": {
+        "roomNumber": "102",
+        "tier": "Studio",
+        "guests": 4
+      }
+    },
+    {
+      "sentence": "kamar 301 deluxe 2 malam",
+      "note": "301 is a suite, so the stated tier contradicts it",
+      "resolves": false,
+      "expected": {
+        "roomNumber": "301",
+        "tier": "Deluxe",
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "kamar 108 suite 1 malam",
+      "note": "108 is a studio, so the stated tier contradicts it",
+      "resolves": false,
+      "expected": {
+        "roomNumber": "108",
+        "tier": "Suite",
+        "nights": 1
+      }
+    },
+    {
+      "sentence": "6 orang 2 malam",
+      "note": "Larger than any room in the hotel, with nothing else to go on",
+      "resolves": false,
+      "expected": {
+        "guests": 6,
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "kamar penthouse 2 malam",
+      "note": "A tier this hotel does not have",
+      "resolves": false,
+      "expected": {
+        "tier": "Penthouse",
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "kamar 205 2 malam, note: tamu minta 2 bantal extra",
+      "note": "The whole point of the marker: the note's 2 must not become a guest count",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "205",
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "kamar 206 2 malam, catatan: hubungi istri di 0812-3456-789",
+      "note": "A number inside the note is not the guest's contact",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "206",
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "kmr 208 2mlm 2org, cttn: minta bantal tambahan",
+      "note": "Abbreviated marker to match the abbreviated sentence around it",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "208",
+        "guests": 2,
+        "nights": 2
+      }
+    }
+  ]
+}

@@ -20,10 +20,10 @@ class BookingDraftTests {
 
         assertEquals("201", draft.roomNumber(), "room number kept");
         assertNull(draft.tier(), "tier not mentioned");
+        assertNull(draft.guestName(), "no name mentioned");
         assertNull(draft.guests(), "guests not mentioned");
         assertNull(draft.nights(), "nights not mentioned");
         assertNull(draft.breakfast(), "breakfast not mentioned");
-        assertNull(draft.notes(), "notes not mentioned");
     }
 
     /** Silence about breakfast is not a request for breakfast. */
@@ -38,7 +38,7 @@ class BookingDraftTests {
     void emptyDraftReportsItself() {
         assertTrue(BookingDraft.empty().isEmpty(), "nothing extracted");
         assertFalse(BookingDraft.builder().nights(2).build().isEmpty(), "one field is enough");
-        assertFalse(BookingDraft.builder().notes("late arrival").build().isEmpty(), "notes count too");
+        assertFalse(BookingDraft.builder().guestName("Budi").build().isEmpty(), "a name counts too");
     }
 
     // -------------------------------------------------------------- normalising
@@ -49,12 +49,12 @@ class BookingDraftTests {
         BookingDraft draft = BookingDraft.builder()
                 .roomNumber("  201 ")
                 .tier(" Deluxe ")
-                .notes("  late arrival  ")
+                .guestName("  Budi  ")
                 .build();
 
         assertEquals("201", draft.roomNumber(), "room number trimmed");
         assertEquals("Deluxe", draft.tier(), "tier trimmed");
-        assertEquals("late arrival", draft.notes(), "notes trimmed");
+        assertEquals("Budi", draft.guestName(), "name trimmed");
     }
 
     /** An empty string means the model found nothing, which is null, not "". */
@@ -63,12 +63,12 @@ class BookingDraftTests {
         BookingDraft draft = BookingDraft.builder()
                 .roomNumber("")
                 .tier("   ")
-                .notes("\t")
+                .guestName("\t")
                 .build();
 
         assertNull(draft.roomNumber(), "blank room number");
         assertNull(draft.tier(), "whitespace tier");
-        assertNull(draft.notes(), "tab-only notes");
+        assertNull(draft.guestName(), "tab-only name");
         assertTrue(draft.isEmpty(), "a draft of blanks is empty");
     }
 

@@ -47,12 +47,14 @@ public final class BookingResolver {
             return Optional.empty();
         }
 
+        String beforeTheNote = Notes.withoutNote(typedText);
         return Optional.of(new BookingProposal(
                 room, tier,
-                appearingIn(draft.guestName(), typedText),
-                PhoneNumbers.findIn(typedText).orElse(null),
+                appearingIn(draft.guestName(), beforeTheNote),
+                PhoneNumbers.findIn(beforeTheNote).orElse(null),
                 atLeastOne(draft.nights()), guests,
-                draft.wantsBreakfast(), draft.notes()));
+                draft.wantsBreakfast(),
+                Notes.noteIn(typedText).orElse(null)));
     }
 
     /** A name the clerk never typed was invented, so it is dropped rather than trusted. */

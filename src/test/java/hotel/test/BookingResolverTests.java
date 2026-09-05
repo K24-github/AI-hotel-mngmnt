@@ -53,13 +53,35 @@ class BookingResolverTests {
     }
 
     @Test
-    void notesAndBreakfastPassStraightThrough() {
+    void aMarkedNoteIsCopiedFromTheText() {
         HotelManager hotel = new HotelManager();
-        BookingProposal proposal =
-                resolve(hotel, BookingDraft.builder().roomNumber("101").notes("late arrival").build()).orElseThrow();
+        BookingProposal proposal = resolve(hotel,
+                BookingDraft.builder().roomNumber("101").build(),
+                "kamar 101, note: late arrival").orElseThrow();
 
-        assertEquals("late arrival", proposal.notes(), "notes kept");
+        assertEquals("late arrival", proposal.notes(), "note taken from after the marker");
         assertFalse(proposal.breakfast(), "breakfast not mentioned");
+    }
+
+    @Test
+    void anUnmarkedSentenceHasNoNote() {
+        HotelManager hotel = new HotelManager();
+        BookingProposal proposal = resolve(hotel,
+                BookingDraft.builder().roomNumber("101").build(),
+                "kamar 101 2 malam minta lantai atas").orElseThrow();
+
+        assertNull(proposal.notes(), "nothing marked, so nothing prefilled");
+    }
+
+    @Test
+    void aNoteDoesNotDonateItsDigits() {
+        HotelManager hotel = new HotelManager();
+        BookingProposal proposal = resolve(hotel,
+                BookingDraft.builder().roomNumber("101").build(),
+                "kamar 101 2 malam, catatan: hubungi istri di 0812-3456-789").orElseThrow();
+
+        assertNull(proposal.phone(), "the number in the note is not the guest's");
+        assertEquals("hubungi istri di 0812-3456-789", proposal.notes(), "note kept whole");
     }
 
     // -------------------------------------------------------- inventions go nowhere
