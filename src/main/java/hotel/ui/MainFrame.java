@@ -324,7 +324,15 @@ public final class MainFrame extends JFrame {
     /** The proposal only fills the form. Nothing is booked until the clerk presses OK. */
     private void openFromSentence(BookingProposal proposal) {
         LocalDate arrival = arrivalOnScreen();
-        refreshAfterChange(proposal.room());
+        Room room = proposal.room();
+        refreshAfterChange(room);
+        int nights = proposal.nights() == null ? 1 : proposal.nights();
+        boolean guardedByCheckIn = isToday(arrival) && room.isOccupied();
+        if (!guardedByCheckIn && !hotelManager.isAvailable(room, arrival, arrival.plusDays(nights))) {
+            sentenceStatus.setText("Room " + room.getRoomNumber()
+                    + " is not free for those nights. Pick another room or change the dates.");
+            return;
+        }
         CheckInDialog.Prefill prefill = new CheckInDialog.Prefill(
                 proposal.guestName(), proposal.phone(), proposal.notes(),
                 arrival, proposal.nights(), proposal.guests(), proposal.breakfast());

@@ -37,6 +37,8 @@ desktop.ini
 hs_err_pid*.log
 replay_pid*.log
 core.*
+*.stackdump
+
 
 # Unimportant files
 docs/
