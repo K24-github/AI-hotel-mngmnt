@@ -1,3 +1,5 @@
+import java.time.Duration
+
 plugins {
     id 'application'
 }
@@ -33,6 +35,30 @@ tasks.named('test') {
         events 'passed', 'skipped', 'failed'
         exceptionFormat 'full'
     }
+    // The eval runs against a live Ollama, so it is opt-in and its settings cross into the forked JVM.
+    ['hotel.ai.eval', 'hotel.ai.models', 'hotel.ai.model', 'hotel.ai.endpoint', 'hotel.ai.gpuLayers'].each { key ->
+        if (System.getProperty(key) != null) {
+            systemProperty key, System.getProperty(key)
+        }
+    }
+}
+
+tasks.register('evalModels', Test) {
+    description = 'Scores each model against the eval set. Needs Ollama running.'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    filter { includeTestsMatching 'hotel.test.ModelEvalTests' }
+    systemProperty 'hotel.ai.eval', 'true'
+    ['hotel.ai.models', 'hotel.ai.gpuLayers'].each { key ->
+        if (System.getProperty(key) != null) {
+            systemProperty key, System.getProperty(key)
+        }
+    }
+    outputs.upToDateWhen { false }
+    testLogging { showStandardStreams = true }
+    timeout = Duration.ofMinutes(60)
 }
 
 tasks.named('run') {

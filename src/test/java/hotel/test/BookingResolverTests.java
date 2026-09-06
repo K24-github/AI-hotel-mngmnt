@@ -3,6 +3,7 @@ package hotel.test;
 import hotel.ai.BookingDraft;
 import hotel.ai.BookingProposal;
 import hotel.ai.BookingResolver;
+import hotel.model.Room;
 import hotel.service.HotelManager;
 
 import org.junit.jupiter.api.Test;
@@ -36,7 +37,6 @@ class BookingResolverTests {
         BookingProposal proposal = resolve(hotel, draft).orElseThrow();
 
         assertEquals(hotel.findRoom("201").orElseThrow(), proposal.room(), "room 201 found");
-        assertEquals("Deluxe", proposal.tier(), "tier carried");
         assertEquals(2, proposal.guests(), "guests carried");
         assertEquals(2, proposal.nights(), "nights carried");
         assertTrue(proposal.breakfast(), "breakfast requested");
@@ -47,9 +47,9 @@ class BookingResolverTests {
     void tierMatchingIgnoresCase() {
         HotelManager hotel = new HotelManager();
         BookingProposal proposal =
-                resolve(hotel, BookingDraft.builder().roomNumber("201").tier("dELuXe").build()).orElseThrow();
+                resolve(hotel, BookingDraft.builder().tier("dELuXe").nights(2).build()).orElseThrow();
 
-        assertEquals("Deluxe", proposal.tier(), "tier normalised to the hotel's spelling");
+        assertEquals("Deluxe", proposal.room().getTierName(), "a deluxe was picked");
     }
 
     @Test
@@ -103,7 +103,6 @@ class BookingResolverTests {
                 "2 nights 2 pax room 201 include breakfast").orElseThrow();
 
         assertEquals(hotel.findRoom("201").orElseThrow(), proposal.room(), "the room still resolves");
-        assertNull(proposal.tier(), "no tier was really given");
         assertNull(proposal.guestName(), "no name was really given");
     }
 
@@ -114,14 +113,15 @@ class BookingResolverTests {
                 "this hotel has no penthouse");
     }
 
-    /** A room number and a tier that disagree means the sentence was misread. */
     @Test
-    void aTierContradictingTheRoomRejectsTheDraft() {
+    void aRoomNumberOutranksAnyTierTheModelInvented() {
         HotelManager hotel = new HotelManager();
         BookingDraft draft = BookingDraft.builder().roomNumber("101").tier("Suite").nights(2).build();
 
         assertEquals("Studio", hotel.findRoom("101").orElseThrow().getTierName(), "101 is a studio");
-        assertTrue(resolve(hotel, draft).isEmpty(), "studio called a suite");
+
+        BookingProposal proposal = resolve(hotel, draft).orElseThrow();
+        assertEquals(hotel.findRoom("101").orElseThrow(), proposal.room(), "the room number still wins");
     }
 
     // ------------------------------------------------------------------ capacity
@@ -154,30 +154,46 @@ class BookingResolverTests {
 
     // -------------------------------------------------- a tier with no room number
 
-    /** "kamar deluxe untuk 2 malam" - fill what was said, let the clerk pick the room. */
     @Test
-    void aTierWithoutARoomNumberLeavesTheRoomUnchosen() {
+    void aTierWithoutARoomNumberPicksAFreeRoomOfThatTier() {
         HotelManager hotel = new HotelManager();
         BookingDraft draft = BookingDraft.builder().tier("Deluxe").guests(2).nights(2).build();
 
         BookingProposal proposal = resolve(hotel, draft).orElseThrow();
 
-        assertFalse(proposal.hasRoom(), "no room chosen for the clerk");
-        assertNull(proposal.room(), "room left null");
-        assertEquals("Deluxe", proposal.tier(), "tier kept so the grid can be filtered");
+        assertEquals("Deluxe", proposal.room().getTierName(), "and it is the tier that was asked for");
+        assertEquals("201", proposal.room().getRoomNumber(), "the lowest free one");
         assertEquals(2, proposal.guests(), "guests still prefilled");
         assertEquals(2, proposal.nights(), "nights still prefilled");
     }
 
     @Test
-    void aSentenceWithNoRoomOrTierStillPrefillsNumbers() {
+    void aPickedRoomIsBigEnoughForTheParty() {
         HotelManager hotel = new HotelManager();
         BookingProposal proposal =
-                resolve(hotel, BookingDraft.builder().guests(2).nights(3).breakfast(true).build()).orElseThrow();
+                resolve(hotel, BookingDraft.builder().tier("Suite").guests(5).nights(2).build()).orElseThrow();
 
-        assertFalse(proposal.hasRoom(), "nothing to pick a room from");
-        assertNull(proposal.tier(), "no tier mentioned");
-        assertEquals(3, proposal.nights(), "nights survive on their own");
+        assertTrue(proposal.room().getCapacity() >= 5, "the picked suite holds the party");
+    }
+
+    @Test
+    void aTierWithEverythingBookedIsDenied() {
+        HotelManager hotel = new HotelManager();
+        for (Room suite : hotel.getRoomsByTier("Suite")) {
+            hotel.createBooking(suite, "Kevin", "0812", null, 2, 2);
+        }
+
+        assertTrue(resolve(hotel, BookingDraft.builder().tier("Suite").nights(2).build()).isEmpty(),
+                "no suite free, so nothing to prefill");
+    }
+
+    @Test
+    void aSentenceNamingNeitherRoomNorTierIsDenied() {
+        HotelManager hotel = new HotelManager();
+
+        assertTrue(resolve(hotel, BookingDraft.builder().guests(2).nights(3).breakfast(true).build()).isEmpty(),
+                "counts alone do not say what to book");
+        assertTrue(resolve(hotel, BookingDraft.builder().nights(2).build()).isEmpty(), "nights alone");
     }
 
     // ------------------------------------------------------------ nonsense numbers

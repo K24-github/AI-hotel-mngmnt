@@ -47,7 +47,7 @@
     },
     {
       "sentence": "kamar deluxe untuk 2 malam",
-      "note": "Tier but no room number; the clerk picks the room",
+      "note": "Tier but no room number; a free deluxe is picked automatically",
       "resolves": true,
       "expected": {
         "tier": "Deluxe",
@@ -144,8 +144,8 @@
     },
     {
       "sentence": "201 suite untuk 2 malam",
-      "note": "Room number and tier disagree; 201 is a deluxe",
-      "resolves": false,
+      "note": "Room number wins over an invented tier; 201 is a deluxe",
+      "resolves": true,
       "expected": {
         "roomNumber": "201",
         "tier": "Suite",
@@ -655,8 +655,8 @@
     },
     {
       "sentence": "2 malam 2 orang",
-      "note": "No room and no tier; only the counts are prefillable",
-      "resolves": true,
+      "note": "No room and no tier; only the counts are prefillable; names neither a room nor a tier, so nothing to open",
+      "resolves": false,
       "expected": {
         "guests": 2,
         "nights": 2
@@ -721,8 +721,8 @@
     },
     {
       "sentence": "kamar 301 deluxe 2 malam",
-      "note": "301 is a suite, so the stated tier contradicts it",
-      "resolves": false,
+      "note": "301 is a suite; the room number wins and the stated tier is dropped",
+      "resolves": true,
       "expected": {
         "roomNumber": "301",
         "tier": "Deluxe",
@@ -731,8 +731,8 @@
     },
     {
       "sentence": "kamar 108 suite 1 malam",
-      "note": "108 is a studio, so the stated tier contradicts it",
-      "resolves": false,
+      "note": "108 is a studio; the room number wins and the stated tier is dropped",
+      "resolves": true,
       "expected": {
         "roomNumber": "108",
         "tier": "Suite",

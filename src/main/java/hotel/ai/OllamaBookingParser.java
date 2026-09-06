@@ -73,6 +73,9 @@ public final class OllamaBookingParser implements BookingParser {
         options.put("num_ctx", config.contextTokens());
         options.put("num_predict", config.replyTokens());
         options.put("temperature", 0);
+        if (config.gpuLayers() != null) {
+            options.put("num_gpu", config.gpuLayers());
+        }
         return request.toString();
     }
 

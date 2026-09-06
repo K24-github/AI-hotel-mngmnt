@@ -111,7 +111,7 @@ class OllamaBookingParserTests {
     @Test
     void anAbsentOllamaLooksExactlyLikeAConfusingSentence() {
         OllamaConfig unreachable = new OllamaConfig("http://localhost:1/api/generate", "qwen3.5:2b-q8_0",
-                OllamaConfig.DEFAULT_PROMPT, 1024, 96, "30m", Duration.ofSeconds(2));
+                OllamaConfig.DEFAULT_PROMPT, 1024, 96, "30m", Duration.ofSeconds(2), null);
 
         Optional<BookingDraft> parsed =
                 new OllamaBookingParser(unreachable).parse("booking kamar 201 untuk 2 orang 2 malam");

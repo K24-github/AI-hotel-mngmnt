@@ -3,6 +3,7 @@ package hotel.ai;
 import hotel.model.Room;
 import hotel.service.HotelManager;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -22,39 +23,34 @@ public final class BookingResolver {
             return Optional.empty();
         }
 
-        Room room = null;
-        if (draft.roomNumber() != null) {
-            Optional<Room> found = hotel.findRoom(draft.roomNumber());
-            if (found.isEmpty()) {
-                return Optional.empty();
-            }
-            room = found.get();
-        }
-
-        String tier = null;
-        if (draft.tier() != null) {
-            tier = canonicalTier(draft.tier());
-            if (tier == null) {
-                return Optional.empty();
-            }
-            if (room != null && !room.getTierName().equals(tier)) {
-                return Optional.empty();
-            }
-        }
-
         Integer guests = atLeastOne(draft.guests());
-        if (guests != null && guests > capacityCeiling(room, tier)) {
+        Integer nights = atLeastOne(draft.nights());
+
+        Optional<Room> room = roomFor(draft, guests, nights);
+        if (room.isEmpty()) {
             return Optional.empty();
         }
 
         String beforeTheNote = Notes.withoutNote(typedText);
         return Optional.of(new BookingProposal(
-                room, tier,
+                room.get(),
                 appearingIn(draft.guestName(), beforeTheNote),
                 PhoneNumbers.findIn(beforeTheNote).orElse(null),
-                atLeastOne(draft.nights()), guests,
+                nights, guests,
                 draft.wantsBreakfast(),
                 Notes.noteIn(typedText).orElse(null)));
+    }
+
+    private Optional<Room> roomFor(BookingDraft draft, Integer guests, Integer nights) {
+        if (draft.roomNumber() != null) {
+            return hotel.findRoom(draft.roomNumber())
+                    .filter(room -> guests == null || guests <= room.getCapacity());
+        }
+        if (draft.tier() != null) {
+            String tier = canonicalTier(draft.tier());
+            return (tier == null) ? Optional.empty() : firstFreeRoom(tier, guests, nights);
+        }
+        return Optional.empty();
     }
 
     /** A name the clerk never typed was invented, so it is dropped rather than trusted. */
@@ -65,17 +61,18 @@ public final class BookingResolver {
         return typedText.toLowerCase(Locale.ROOT).contains(name.toLowerCase(Locale.ROOT)) ? name : null;
     }
 
+    private Optional<Room> firstFreeRoom(String tier, Integer guests, Integer nights) {
+        LocalDate from = LocalDate.now();
+        LocalDate to = from.plusDays(nights == null ? 1 : nights);
+        return hotel.getAvailableRooms(from, to).stream()
+                .filter(candidate -> candidate.getTierName().equals(tier))
+                .filter(candidate -> guests == null || candidate.getCapacity() >= guests)
+                .findFirst();
+    }
+
     private String canonicalTier(String tierName) {
         List<Room> inTier = hotel.getRoomsByTier(tierName);
         return inTier.isEmpty() ? null : inTier.get(0).getTierName();
-    }
-
-    private int capacityCeiling(Room room, String tier) {
-        if (room != null) {
-            return room.getCapacity();
-        }
-        List<Room> candidates = (tier == null) ? hotel.getRooms() : hotel.getRoomsByTier(tier);
-        return candidates.stream().mapToInt(Room::getCapacity).max().orElse(0);
     }
 
     private static Integer atLeastOne(Integer value) {

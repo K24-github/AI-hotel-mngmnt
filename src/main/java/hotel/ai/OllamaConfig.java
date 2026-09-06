@@ -3,16 +3,28 @@ package hotel.ai;
 import java.time.Duration;
 
 public record OllamaConfig(String endpoint, String model, String promptTemplate,
-                           int contextTokens, int replyTokens, String keepAlive, Duration timeout) {
+                           int contextTokens, int replyTokens, String keepAlive, Duration timeout,
+                           Integer gpuLayers) {
 
     public static final String DEFAULT_ENDPOINT = "http://localhost:11434/api/generate";
-    public static final String DEFAULT_MODEL = "qwen3.5:2b-q8_0";
+    public static final String DEFAULT_MODEL = "gemma4:e2b-it-qat";
 
     public static final String DEFAULT_PROMPT = """
             Extract booking fields from the sentence. Reply with JSON only.
-            Indonesian and English may be mixed. malam/night = nights. orang/tamu/pax/guest = guests.
-            kamar/room number goes in roomNumber. Studio, Deluxe and Suite are tiers.
-            sarapan/breakfast = true, tanpa sarapan/no breakfast = false.
+            Indonesian and English may be mixed.
+
+            A number is a guest count only when a guest word sits beside it:
+            orang, org, tamu, pax, px, guest, guests, people, person.
+            A number is a night count only when a night word sits beside it:
+            malam, mlm, night, nights, nt, hari.
+            If the sentence has no guest word, guests is null. Never reuse the nights
+            number as the guests number, or the guests number as the nights number.
+
+            roomNumber: the number after kamar, kmr, room, rm, or a bare room number.
+            tier: only Studio, Deluxe or Suite, and only if that word appears.
+            breakfast: true for sarapan or breakfast, false for tanpa sarapan or no breakfast.
+            guestName: only a name written in the sentence.
+
             Use null for anything the sentence does not say. Do not guess.
 
             Sentence: %s""";
@@ -31,7 +43,7 @@ public record OllamaConfig(String endpoint, String model, String promptTemplate,
 
     public static OllamaConfig of(String model) {
         return new OllamaConfig(DEFAULT_ENDPOINT, model, DEFAULT_PROMPT,
-                1024, 96, "30m", Duration.ofSeconds(30));
+                1024, 96, "30m", Duration.ofSeconds(30), null);
     }
 
     public static OllamaConfig fromSystemProperties() {
@@ -42,12 +54,13 @@ public record OllamaConfig(String endpoint, String model, String promptTemplate,
                 Integer.getInteger("hotel.ai.contextTokens", 1024),
                 Integer.getInteger("hotel.ai.replyTokens", 96),
                 System.getProperty("hotel.ai.keepAlive", "30m"),
-                Duration.ofSeconds(Integer.getInteger("hotel.ai.timeoutSeconds", 30)));
+                Duration.ofSeconds(Integer.getInteger("hotel.ai.timeoutSeconds", 30)),
+                Integer.getInteger("hotel.ai.gpuLayers"));
     }
 
     public OllamaConfig withModel(String otherModel) {
         return new OllamaConfig(endpoint, otherModel, promptTemplate,
-                contextTokens, replyTokens, keepAlive, timeout);
+                contextTokens, replyTokens, keepAlive, timeout, gpuLayers);
     }
 
     public String promptFor(String sentence) {
