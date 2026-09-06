@@ -86,6 +86,35 @@ class BookingResolverTests {
 
     // -------------------------------------------------------- inventions go nowhere
 
+    @Test
+    void aRoomNumberThatIsNotARoomFallsBackToTheTier() {
+        HotelManager hotel = new HotelManager();
+        BookingDraft draft = BookingDraft.builder()
+                .roomNumber("5").tier("Studio").nights(5).guestName("hana").build();
+
+        BookingProposal proposal = resolve(hotel, draft, "hana jo studio 5 nights breakfast").orElseThrow();
+
+        assertEquals("Studio", proposal.room().getTierName(), "a studio was picked instead");
+        assertEquals(5, proposal.nights(), "the rest of the sentence survived");
+        assertEquals("hana", proposal.guestName(), "and so did the name");
+    }
+
+    @Test
+    void aFutureArrivalPicksARoomFreeOnThatDate() {
+        HotelManager hotel = new HotelManager();
+        java.time.LocalDate nextWeek = java.time.LocalDate.now().plusDays(7);
+        for (Room studio : hotel.getRoomsByTier("Studio")) {
+            hotel.createReservation(studio, "Kevin", "0812", null, nextWeek, 2, 1);
+        }
+
+        BookingDraft draft = BookingDraft.builder().tier("Studio").nights(2).build();
+
+        assertTrue(new BookingResolver(hotel).resolve(draft, "", nextWeek).isEmpty(),
+                "every studio is taken that week");
+        assertTrue(new BookingResolver(hotel).resolve(draft, "", java.time.LocalDate.now()).isPresent(),
+                "but they are free today");
+    }
+
     /** Constraint: if the model invents room 999 the whole proposal dies. */
     @Test
     void anInventedRoomNumberRejectsTheDraft() {

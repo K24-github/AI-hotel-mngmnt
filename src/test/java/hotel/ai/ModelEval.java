@@ -57,9 +57,8 @@ public final class ModelEval {
         int emptyReplies = 0;
 
         for (EvalSet.Row row : rows) {
-            String forParsing = Notes.withoutNote(row.sentence());
             long started = System.nanoTime();
-            Optional<BookingDraft> parsed = parser.parse(forParsing);
+            Optional<BookingDraft> parsed = parser.parse(row.sentence());
             timings.add((System.nanoTime() - started) / 1_000_000);
 
             if (parsed.isEmpty()) {

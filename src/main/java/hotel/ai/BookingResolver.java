@@ -19,6 +19,10 @@ public final class BookingResolver {
     }
 
     public Optional<BookingProposal> resolve(BookingDraft draft, String typedText) {
+        return resolve(draft, typedText, LocalDate.now());
+    }
+
+    public Optional<BookingProposal> resolve(BookingDraft draft, String typedText, LocalDate arrival) {
         if (draft == null || draft.isEmpty()) {
             return Optional.empty();
         }
@@ -26,7 +30,7 @@ public final class BookingResolver {
         Integer guests = atLeastOne(draft.guests());
         Integer nights = atLeastOne(draft.nights());
 
-        Optional<Room> room = roomFor(draft, guests, nights);
+        Optional<Room> room = roomFor(draft, guests, nights, arrival);
         if (room.isEmpty()) {
             return Optional.empty();
         }
@@ -41,14 +45,16 @@ public final class BookingResolver {
                 Notes.noteIn(typedText).orElse(null)));
     }
 
-    private Optional<Room> roomFor(BookingDraft draft, Integer guests, Integer nights) {
+    private Optional<Room> roomFor(BookingDraft draft, Integer guests, Integer nights, LocalDate arrival) {
         if (draft.roomNumber() != null) {
-            return hotel.findRoom(draft.roomNumber())
-                    .filter(room -> guests == null || guests <= room.getCapacity());
+            Optional<Room> named = hotel.findRoom(draft.roomNumber());
+            if (named.isPresent()) {
+                return named.filter(room -> guests == null || guests <= room.getCapacity());
+            }
         }
         if (draft.tier() != null) {
             String tier = canonicalTier(draft.tier());
-            return (tier == null) ? Optional.empty() : firstFreeRoom(tier, guests, nights);
+            return (tier == null) ? Optional.empty() : firstFreeRoom(tier, guests, nights, arrival);
         }
         return Optional.empty();
     }
@@ -61,8 +67,8 @@ public final class BookingResolver {
         return typedText.toLowerCase(Locale.ROOT).contains(name.toLowerCase(Locale.ROOT)) ? name : null;
     }
 
-    private Optional<Room> firstFreeRoom(String tier, Integer guests, Integer nights) {
-        LocalDate from = LocalDate.now();
+    private Optional<Room> firstFreeRoom(String tier, Integer guests, Integer nights, LocalDate arrival) {
+        LocalDate from = arrival;
         LocalDate to = from.plusDays(nights == null ? 1 : nights);
         return hotel.getAvailableRooms(from, to).stream()
                 .filter(candidate -> candidate.getTierName().equals(tier))

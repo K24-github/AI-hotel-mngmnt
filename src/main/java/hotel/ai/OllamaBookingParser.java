@@ -46,12 +46,20 @@ public final class OllamaBookingParser implements BookingParser {
                 .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
     }
 
+    /**
+     * Takes the sentence exactly as the clerk typed it. A marked note and a phone number
+     * are cut out here, because their digits otherwise land in a numbered field.
+     */
     @Override
     public Optional<BookingDraft> parse(String text) {
         if (text == null || text.isBlank()) {
             return Optional.empty();
         }
-        return transport.send(requestFor(text))
+        String readable = PhoneNumbers.withoutPhone(Notes.withoutNote(text));
+        if (readable.isBlank()) {
+            return Optional.empty();
+        }
+        return transport.send(requestFor(readable))
                 .flatMap(this::replyBody)
                 .flatMap(this::draftFrom)
                 .filter(draft -> !draft.isEmpty());

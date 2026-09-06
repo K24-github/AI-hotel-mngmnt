@@ -1,4 +1,10 @@
 package hotel.ui;
+import hotel.ai.BookingDraft;
+import hotel.ai.BookingParser;
+import hotel.ai.BookingProposal;
+import hotel.ai.BookingResolver;
+import hotel.ai.OllamaBookingParser;
+import hotel.ai.OllamaConfig;
 import hotel.model.Booking;
 import hotel.model.BookingStatus;
 import hotel.model.Room;
@@ -8,6 +14,7 @@ import hotel.store.JsonBookingStore;
 import javax.swing.BorderFactory;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -19,9 +26,11 @@ import javax.swing.JSpinner;
 import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
+import javax.swing.JTextField;
 import javax.swing.JTextArea;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
+import javax.swing.SwingWorker;
 import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableModel;
 import java.awt.BorderLayout;
@@ -56,6 +65,12 @@ public final class MainFrame extends JFrame {
     private final JPanel gridPanel = new JPanel(new GridLayout(0, 4, 12, 12));
     private final JTextArea detailsArea = new JTextArea();
     private final JLabel selectedRoomLabel = new JLabel("Selected Room: -");
+
+    private final JTextField sentenceField = new JTextField();
+    private final JLabel sentenceStatus = new JLabel(" ");
+    private final JCheckBox aiToggle = new JCheckBox("AI", true);
+    private final BookingParser liveParser = new OllamaBookingParser(OllamaConfig.fromSystemProperties());
+    private BookingParser parser = liveParser;
 
     private final JLabel availableLabel = new JLabel();
     private final JLabel occupiedLabel = new JLabel();
@@ -211,7 +226,7 @@ public final class MainFrame extends JFrame {
         JPanel leftPane = new JPanel(new BorderLayout(12, 12));
         leftPane.setOpaque(false);
 
-        JPanel filterPanel = new JPanel(new GridLayout(3, 1, 8, 8));
+        JPanel filterPanel = new JPanel(new GridLayout(4, 1, 8, 8));
         filterPanel.setBackground(Color.WHITE);
         filterPanel.setBorder(UiTheme.panelBorder(12));
 
@@ -247,6 +262,7 @@ public final class MainFrame extends JFrame {
         JLabel legend = new JLabel("Green = free, Amber = reserved, Red = guest in the room.");
         legend.setForeground(UiTheme.MUTED_TEXT);
 
+        filterPanel.add(buildSentenceBar());
         filterPanel.add(row1);
         filterPanel.add(row2);
         filterPanel.add(legend);
@@ -262,6 +278,87 @@ public final class MainFrame extends JFrame {
         leftPane.add(filterPanel, BorderLayout.NORTH);
         leftPane.add(gridScroll, BorderLayout.CENTER);
         return leftPane;
+    }
+
+    /**
+     * Parses off the event thread: a blocking model call on it would freeze the window
+     * for several seconds on the front-desk machine.
+     */
+    private void handleSentence() {
+        String typed = sentenceField.getText();
+        if (typed == null || typed.isBlank()) {
+            return;
+        }
+        sentenceField.setEnabled(false);
+        sentenceStatus.setText("Reading that...");
+
+        new SwingWorker<Optional<BookingProposal>, Void>() {
+            @Override
+            protected Optional<BookingProposal> doInBackground() {
+                LocalDate arrival = arrivalOnScreen();
+                Optional<BookingDraft> draft = parser.parse(typed);
+                return draft.flatMap(read ->
+                        new BookingResolver(hotelManager).resolve(read, typed, arrival));
+            }
+
+            @Override
+            protected void done() {
+                sentenceField.setEnabled(true);
+                sentenceField.requestFocusInWindow();
+                Optional<BookingProposal> proposal;
+                try {
+                    proposal = get();
+                } catch (Exception ex) {
+                    proposal = Optional.empty();
+                }
+                if (proposal.isEmpty()) {
+                    sentenceStatus.setText("Could not read that. Pick a room and fill the form as usual.");
+                    return;
+                }
+                sentenceStatus.setText(" ");
+                openFromSentence(proposal.get());
+            }
+        }.execute();
+    }
+
+    /** The proposal only fills the form. Nothing is booked until the clerk presses OK. */
+    private void openFromSentence(BookingProposal proposal) {
+        LocalDate arrival = arrivalOnScreen();
+        refreshAfterChange(proposal.room());
+        CheckInDialog.Prefill prefill = new CheckInDialog.Prefill(
+                proposal.guestName(), proposal.phone(), proposal.notes(),
+                arrival, proposal.nights(), proposal.guests(), proposal.breakfast());
+        if (isToday(arrival)) {
+            handleCheckIn(prefill);
+        } else {
+            handleReserve(prefill);
+        }
+        sentenceField.setText("");
+    }
+
+    /** Bookings follow the date the clerk is looking at, never a date the model invented. */
+    private LocalDate arrivalOnScreen() {
+        LocalDate viewed = getViewedDate();
+        return viewed.isBefore(LocalDate.now()) ? LocalDate.now() : viewed;
+    }
+
+    private JPanel buildSentenceBar() {
+        JPanel row = new JPanel(new BorderLayout(8, 0));
+        row.setOpaque(false);
+        sentenceField.setToolTipText("Type a booking in plain language, then press Enter");
+        aiToggle.setOpaque(false);
+        aiToggle.setToolTipText("Turn off to fill every form by hand");
+        row.add(new JLabel("Type a booking:"), BorderLayout.WEST);
+        row.add(sentenceField, BorderLayout.CENTER);
+        row.add(aiToggle, BorderLayout.EAST);
+
+        sentenceStatus.setForeground(UiTheme.MUTED_TEXT);
+
+        JPanel bar = new JPanel(new BorderLayout(0, 4));
+        bar.setOpaque(false);
+        bar.add(row, BorderLayout.CENTER);
+        bar.add(sentenceStatus, BorderLayout.SOUTH);
+        return bar;
     }
 
     private JPanel buildRightPanel() {
@@ -422,6 +519,12 @@ public final class MainFrame extends JFrame {
     }
 
     private void registerEvents() {
+        sentenceField.addActionListener(event -> handleSentence());
+        aiToggle.addActionListener(event -> {
+            parser = aiToggle.isSelected() ? liveParser : BookingParser.off();
+            sentenceField.setEnabled(aiToggle.isSelected());
+            sentenceStatus.setText(aiToggle.isSelected() ? " " : "AI off. Every form is filled by hand.");
+        });
         dateField.addChangeListener(() -> refreshAfterChange(selectedRoom));
         todayButton.addActionListener(e -> dateField.setValue(LocalDate.now()));
         floorFilterBox.addActionListener(e -> rebuildGrid());
@@ -563,6 +666,12 @@ public final class MainFrame extends JFrame {
      * has arrived, check that reservation in; otherwise take a walk-in.
      */
     private void handleCheckIn() {
+        handleCheckIn(CheckInDialog.Prefill.of(LocalDate.now(),
+                (int) quickNightsSpinner.getValue(),
+                (int) quickGuestsSpinner.getValue()));
+    }
+
+    private void handleCheckIn(CheckInDialog.Prefill prefill) {
         if (selectedRoom == null) {
             showMessage("Please click a room first.");
             return;
@@ -585,7 +694,7 @@ public final class MainFrame extends JFrame {
             return;
         }
 
-        takeWalkIn();
+        takeWalkIn(prefill);
     }
 
     private void checkInExistingReservation(Booking booking) {
@@ -606,14 +715,12 @@ public final class MainFrame extends JFrame {
         });
     }
 
-    private void takeWalkIn() {
+    private void takeWalkIn(CheckInDialog.Prefill prefill) {
         Optional<CheckInDialog.Result> result = CheckInDialog.show(
                 this,
                 selectedRoom,
                 CheckInDialog.Mode.WALK_IN,
-                CheckInDialog.Prefill.of(LocalDate.now(),
-                        (int) quickNightsSpinner.getValue(),
-                        (int) quickGuestsSpinner.getValue()),
+                prefill,
                 date -> statusOn(selectedRoom, date)
         );
         if (result.isEmpty()) {
@@ -634,19 +741,23 @@ public final class MainFrame extends JFrame {
 
     /** Books a room for dates ahead without anybody arriving now. */
     private void handleReserve() {
+        LocalDate suggested = getViewedDate().isBefore(LocalDate.now()) ? LocalDate.now() : getViewedDate();
+        handleReserve(CheckInDialog.Prefill.of(suggested,
+                (int) quickNightsSpinner.getValue(),
+                (int) quickGuestsSpinner.getValue()));
+    }
+
+    private void handleReserve(CheckInDialog.Prefill prefill) {
         if (selectedRoom == null) {
             showMessage("Please click a room first.");
             return;
         }
 
-        LocalDate suggested = getViewedDate().isBefore(LocalDate.now()) ? LocalDate.now() : getViewedDate();
         Optional<CheckInDialog.Result> result = CheckInDialog.show(
                 this,
                 selectedRoom,
                 CheckInDialog.Mode.RESERVATION,
-                CheckInDialog.Prefill.of(suggested,
-                        (int) quickNightsSpinner.getValue(),
-                        (int) quickGuestsSpinner.getValue()),
+                prefill,
                 date -> statusOn(selectedRoom, date)
         );
         if (result.isEmpty()) {

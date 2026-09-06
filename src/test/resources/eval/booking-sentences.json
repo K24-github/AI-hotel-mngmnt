@@ -784,6 +784,107 @@
         "guests": 2,
         "nights": 2
       }
+    },
+    {
+      "sentence": "hana jo studio 5 nights breakfast",
+      "note": "Kevin's phrasing: name first, tier after the count, no room number",
+      "resolves": true,
+      "expected": {
+        "tier": "Studio",
+        "guestName": "hana jo",
+        "nights": 5,
+        "breakfast": true
+      }
+    },
+    {
+      "sentence": "Hana Malmo 6 nights studio +6143567382 breakfast",
+      "note": "Regression: the +61 country code used to be read as six guests",
+      "resolves": true,
+      "expected": {
+        "tier": "Studio",
+        "guestName": "Hana Malmo",
+        "nights": 6,
+        "breakfast": true
+      }
+    },
+    {
+      "sentence": "studio 5 nights breakfast",
+      "note": "Regression: the lone 5 used to be taken as a room number",
+      "resolves": true,
+      "expected": {
+        "tier": "Studio",
+        "nights": 5,
+        "breakfast": true
+      }
+    },
+    {
+      "sentence": "kamar 201 2 malam +6143567382",
+      "note": "Country code beside a real room number",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "201",
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "room 302 3 nights +6143567382 breakfast",
+      "note": "International number in the middle, fields on both sides",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "302",
+        "nights": 3,
+        "breakfast": true
+      }
+    },
+    {
+      "sentence": "Hana Malmo room 204 2 nights",
+      "note": "Two-word western name before the room number",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "204",
+        "guestName": "Hana Malmo",
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "booking room 305 for Sarah Jenkins 2 nights",
+      "note": "Western full name mid-sentence, English only",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "305",
+        "guestName": "Sarah Jenkins",
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "3 nights deluxe for 2 guests",
+      "note": "Counts before the tier, no room number and no name",
+      "resolves": true,
+      "expected": {
+        "tier": "Deluxe",
+        "guests": 2,
+        "nights": 3
+      }
+    },
+    {
+      "sentence": "studio 6 orang 2 nights",
+      "note": "Correctly read but impossible: no studio holds six",
+      "resolves": false,
+      "expected": {
+        "tier": "Studio",
+        "guests": 6,
+        "nights": 2
+      }
+    },
+    {
+      "sentence": "hana 5 nights breakfast",
+      "note": "A name and a duration name no room and no tier, so nothing can open",
+      "resolves": false,
+      "expected": {
+        "guestName": "hana",
+        "nights": 5,
+        "breakfast": true
+      }
     }
   ]
 }

@@ -68,6 +68,20 @@ class PhoneNumbersTests {
     }
 
     @Test
+    void thePhoneIsCutOutOfWhatTheModelReads() {
+        assertEquals("Hana Malmo 6 nights studio breakfast",
+                PhoneNumbers.withoutPhone("Hana Malmo 6 nights studio +6143567382 breakfast"),
+                "a country code must not read as a guest count");
+        assertEquals("kamar 201 2 malam",
+                PhoneNumbers.withoutPhone("kamar 201 2 malam 0812-3456-789"), "trailing number removed");
+        assertEquals("kamar 201 2 malam",
+                PhoneNumbers.withoutPhone("kamar 201 2 malam"), "nothing to remove");
+        assertEquals("booking 107 a/n Rina 2 malam",
+                PhoneNumbers.withoutPhone("booking 107 a/n Rina 0813 2222 3333 2 malam"),
+                "the nights count survives");
+    }
+
+    @Test
     void nothingToSearchYieldsNothing() {
         assertEquals(Optional.empty(), PhoneNumbers.findIn(null), "null");
         assertEquals(Optional.empty(), PhoneNumbers.findIn("   "), "blank");
