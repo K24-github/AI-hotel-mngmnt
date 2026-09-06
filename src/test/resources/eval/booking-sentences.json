@@ -885,6 +885,67 @@
         "nights": 5,
         "breakfast": true
       }
+    },
+    {
+      "sentence": "kamar 205 2 malam ga usah sarapan",
+      "note": "Colloquial refusal before the word",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "205",
+        "nights": 2,
+        "breakfast": false
+      }
+    },
+    {
+      "sentence": "booking 108 3 malam sarapannya ga usah",
+      "note": "Colloquial refusal after the word, with the -nya suffix",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "108",
+        "nights": 3,
+        "breakfast": false
+      }
+    },
+    {
+      "sentence": "kamar 203 1 malam tidak pakai sarapan",
+      "note": "Negated the verb rather than the noun",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "203",
+        "nights": 1,
+        "breakfast": false
+      }
+    },
+    {
+      "sentence": "room 202 2 nights skip breakfast",
+      "note": "English refusal with no negation word at all",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "202",
+        "nights": 2,
+        "breakfast": false
+      }
+    },
+    {
+      "sentence": "room 210 2 nights, breakfast not needed",
+      "note": "English refusal sitting after the word",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "210",
+        "nights": 2,
+        "breakfast": false
+      }
+    },
+    {
+      "sentence": "301 3 malam 2 orang, sarapan tidak perlu",
+      "note": "Refusal after the word with the other fields also present",
+      "resolves": true,
+      "expected": {
+        "roomNumber": "301",
+        "guests": 2,
+        "nights": 3,
+        "breakfast": false
+      }
     }
   ]
 }

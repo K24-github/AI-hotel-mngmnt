@@ -23,7 +23,8 @@ public record OllamaConfig(String endpoint, String model, String promptTemplate,
             roomNumber: a three-digit number such as 101, 204 or 308, usually after
             kamar, kmr, room or rm. A one or two digit number is never a room number.
             tier: only Studio, Deluxe or Suite, and only if that word appears.
-            breakfast: true for sarapan or breakfast, false for tanpa sarapan or no breakfast.
+            breakfast: true for sarapan or breakfast, false if a refusal word sits
+            either side of it: tidak, tdk, ga, gak, tanpa, no, not, skip, without.
             guestName: only a name written in the sentence.
 
             Use null for anything the sentence does not say. Do not guess.
