@@ -207,6 +207,21 @@ class BookingResolverTests {
                 "kamar 201 2 hari").orElseThrow().nights(), "hari");
     }
 
+    /** A stay can be given as a week rather than a number of nights, in either language. */
+    @Test
+    void aStayGivenAsWeeksIsKept() {
+        HotelManager hotel = new HotelManager();
+
+        assertEquals(7, resolve(hotel, BookingDraft.builder().tier("Deluxe").nights(7).build(),
+                "deluxe for a week").orElseThrow().nights(), "week");
+        assertEquals(7, resolve(hotel, BookingDraft.builder().roomNumber("201").nights(7).build(),
+                "kamar 201 seminggu").orElseThrow().nights(), "seminggu");
+        assertEquals(14, resolve(hotel, BookingDraft.builder().roomNumber("201").nights(14).build(),
+                "kamar 201 2 minggu").orElseThrow().nights(), "minggu");
+        assertEquals(14, resolve(hotel, BookingDraft.builder().roomNumber("201").nights(14).build(),
+                "room 201 for 2 weeks").orElseThrow().nights(), "weeks");
+    }
+
     @Test
     void aWordThatMerelyContainsANightWordDoesNotCount() {
         HotelManager hotel = new HotelManager();
@@ -215,6 +230,8 @@ class BookingResolverTests {
                 "kamar 201 untuk 2 harimau").orElseThrow().nights(), "harimau is not hari");
         assertNull(resolve(hotel, BookingDraft.builder().roomNumber("201").nights(2).build(),
                 "room 201 nightclub voucher").orElseThrow().nights(), "nightclub is not night");
+        assertNull(resolve(hotel, BookingDraft.builder().roomNumber("201").nights(2).build(),
+                "room 201 weekend package").orElseThrow().nights(), "weekend is not week");
     }
 
     // ------------------------------------------- guest counts the sentence never gave

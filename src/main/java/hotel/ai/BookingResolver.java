@@ -13,7 +13,7 @@ public final class BookingResolver {
     private static final Pattern GUEST_WORD = Pattern.compile(
             "\\b(orang|org|tamu|pax|px|guests?|people|person)\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern NIGHT_WORD = Pattern.compile(
-            "\\b(malam|mlm|nights?|nt|hari)\\b", Pattern.CASE_INSENSITIVE);
+            "\\b(malam|mlm|nights?|nt|hari|weeks?|minggu|seminggu)\\b", Pattern.CASE_INSENSITIVE);
 
     private final HotelManager hotel;
 
