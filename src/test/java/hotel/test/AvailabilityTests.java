@@ -381,6 +381,50 @@ class AvailabilityTests {
         assertFalse(hotel.getAvailableRooms(today, today.plusDays(3)).contains(room), "and not offered");
     }
 
+    /** The grid, the filters and the dashboard all ask this, so it has to count the person. */
+    @Test
+    void anOverstayingGuestStillHoldsTheRoomToday() {
+        HotelManager hotel = new HotelManager();
+        Room room = hotel.findRoom("203").orElseThrow();
+        LocalDate today = LocalDate.now();
+        Booking booking = hotel.createReservation(room, "Raymond", "0812", null, today.minusDays(2), 1, 1);
+        hotel.checkIn(booking);
+
+        assertTrue(hotel.getBookingOn(room, today).isEmpty(), "the dates alone say the room is free");
+        assertTrue(hotel.getHolderOn(room, today).isPresent(), "but someone is still in it");
+        assertEquals(booking, hotel.getHolderOn(room, today).orElseThrow(), "and it is their booking");
+    }
+
+    /** Only today. Whether they will still be there next week is not knowable. */
+    @Test
+    void anOverstayingGuestDoesNotHoldFutureDates() {
+        HotelManager hotel = new HotelManager();
+        Room room = hotel.findRoom("204").orElseThrow();
+        LocalDate today = LocalDate.now();
+        hotel.checkIn(hotel.createReservation(room, "Raymond", "0812", null, today.minusDays(2), 1, 1));
+
+        assertTrue(hotel.getHolderOn(room, today.plusDays(1)).isEmpty(), "tomorrow is not held");
+        assertTrue(hotel.getHolderOn(room, today.plusDays(7)).isEmpty(), "nor next week");
+    }
+
+    @Test
+    void anOverstayingGuestIsCountedAsBookedToday() {
+        HotelManager hotel = new HotelManager();
+        Room room = hotel.findRoom("205").orElseThrow();
+        LocalDate today = LocalDate.now();
+        int freeBefore = hotel.getFreeCount(today);
+        hotel.checkIn(hotel.createReservation(room, "Raymond", "0812", null, today.minusDays(2), 1, 1));
+
+        assertEquals(freeBefore - 1, hotel.getFreeCount(today), "the dashboard stops calling it free");
+    }
+
+    @Test
+    void holderOnHandlesMissingArguments() {
+        HotelManager hotel = new HotelManager();
+        assertTrue(hotel.getHolderOn(null, LocalDate.now()).isEmpty(), "no room");
+        assertTrue(hotel.getHolderOn(hotel.findRoom("101").orElseThrow(), null).isEmpty(), "no date");
+    }
+
     @Test
     void aRoomFreedByCheckOutIsAvailableAgain() {
         HotelManager hotel = new HotelManager();

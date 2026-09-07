@@ -596,9 +596,13 @@ public final class MainFrame extends JFrame {
         return holderOn(room).isPresent() ? "Reserved" : "Ready";
     }
 
-    /** The booking holding this room on the viewed date, if any. */
+    /**
+     * The booking holding this room on the viewed date, if any. A guest who has stayed
+     * past their last night still holds the room today, even though the dates have run
+     * out, so the grid does not paint an occupied room green.
+     */
     private Optional<Booking> holderOn(Room room) {
-        return hotelManager.getBookingOn(room, getViewedDate());
+        return hotelManager.getHolderOn(room, getViewedDate());
     }
 
     private boolean isFreeOnViewedDate(Room room) {
@@ -1029,12 +1033,12 @@ public final class MainFrame extends JFrame {
      */
     private DateField.DayStatus statusOn(LocalDate date) {
         boolean anythingBooked = hotelManager.getRooms().stream()
-                .anyMatch(room -> hotelManager.getBookingOn(room, date).isPresent());
+                .anyMatch(room -> hotelManager.getHolderOn(room, date).isPresent());
         return anythingBooked ? DateField.DayStatus.RESERVED : DateField.DayStatus.FREE;
     }
 
     private DateField.DayStatus statusOn(Room room, LocalDate date) {
-        Optional<Booking> holder = hotelManager.getBookingOn(room, date);
+        Optional<Booking> holder = hotelManager.getHolderOn(room, date);
         if (holder.isEmpty()) {
             return DateField.DayStatus.FREE;
         }

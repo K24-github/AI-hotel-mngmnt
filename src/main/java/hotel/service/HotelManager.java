@@ -145,7 +145,25 @@ public class HotelManager {
         return rooms.stream().filter(room -> isAvailable(room, from, to)).toList();
     }
 
-    /** Bookings holding this room on a given night, if any. */
+    /**
+     * Who holds this room on that date, counting a guest who is still in it. A stay that
+     * has run past its last night is invisible to {@link #getBookingOn}, which asks the
+     * dates only, so a room with a person in it would otherwise read as free today.
+     */
+    public Optional<Booking> getHolderOn(Room room, LocalDate date) {
+        if (room == null || date == null) {
+            return Optional.empty();
+        }
+        Optional<Booking> byDate = getBookingOn(room, date);
+        if (byDate.isPresent()) {
+            return byDate;
+        }
+        return (room.isOccupied() && date.equals(LocalDate.now()))
+                ? Optional.ofNullable(room.getActiveBooking())
+                : Optional.empty();
+    }
+
+    /** Bookings holding this room on a given night, if any, by the dates alone. */
     public Optional<Booking> getBookingOn(Room room, LocalDate date) {
         return bookings.stream()
                 .filter(booking -> booking.getRoom().equals(room))
@@ -349,7 +367,7 @@ public class HotelManager {
 
     /** Rooms held on {@code date}, whether by an in-house guest or a reservation. */
     public int getBookedCount(LocalDate date) {
-        return (int) rooms.stream().filter(room -> getBookingOn(room, date).isPresent()).count();
+        return (int) rooms.stream().filter(room -> getHolderOn(room, date).isPresent()).count();
     }
 
     public int getFreeCount(LocalDate date) {
