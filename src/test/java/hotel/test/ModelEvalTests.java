@@ -2,6 +2,7 @@ package hotel.test;
 
 import hotel.ai.EvalSet;
 import hotel.ai.ModelEval;
+import hotel.ai.ModelHealth;
 import hotel.ai.OllamaConfig;
 
 import org.junit.jupiter.api.Test;
@@ -23,7 +24,7 @@ class ModelEvalTests {
     @Test
     void scoreEveryModelAgainstTheEvalSet() throws IOException {
         OllamaConfig base = OllamaConfig.fromSystemProperties();
-        assumeTrue(ModelEval.ollamaIsUp(base.endpoint()), "Ollama is not answering; skipping the eval");
+        assumeTrue(ModelHealth.isAnswering(base.endpoint()), "Ollama is not answering; skipping the eval");
 
         List<EvalSet.Row> rows = EvalSet.load();
         List<String> models = List.of(System.getProperty("hotel.ai.models",

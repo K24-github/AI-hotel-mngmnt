@@ -117,6 +117,9 @@ public class HotelManager {
     /**
      * True if nothing already holds this room across [from, to). Back-to-back stays
      * are fine: a departure on the 5th does not clash with an arrival on the 5th.
+     *
+     * <p>A guest who is still in the room blocks a stay starting today even when their
+     * booked nights have run out. Someone who overstays is invisible to the dates.
      */
     public boolean isAvailable(Room room, LocalDate from, LocalDate to) {
         if (room == null || from == null || to == null) {
@@ -124,6 +127,9 @@ public class HotelManager {
         }
         if (!to.isAfter(from)) {
             throw new IllegalArgumentException("Departure must be after arrival.");
+        }
+        if (room.isOccupied() && !from.isAfter(LocalDate.now())) {
+            return false;
         }
         return bookings.stream().noneMatch(booking ->
                 booking.getRoom().equals(room) && booking.overlaps(from, to));

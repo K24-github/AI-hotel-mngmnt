@@ -1,8 +1,8 @@
 package hotel.ui;
-import hotel.ai.BookingDraft;
 import hotel.ai.BookingParser;
 import hotel.ai.BookingProposal;
 import hotel.ai.BookingResolver;
+import hotel.ai.ModelHealth;
 import hotel.ai.OllamaBookingParser;
 import hotel.ai.OllamaConfig;
 import hotel.model.Booking;
@@ -69,8 +69,12 @@ public final class MainFrame extends JFrame {
     private final JTextField sentenceField = new JTextField();
     private final JLabel sentenceStatus = new JLabel(" ");
     private final JCheckBox aiToggle = new JCheckBox("AI", true);
-    private final BookingParser liveParser = new OllamaBookingParser(OllamaConfig.fromSystemProperties());
+    private final OllamaConfig aiSettings = OllamaConfig.fromSystemProperties();
+    private final BookingParser liveParser = new OllamaBookingParser(aiSettings);
     private BookingParser parser = liveParser;
+
+    private record Outcome(Optional<BookingProposal> proposal, boolean modelAnswered) {
+    }
 
     private final JLabel availableLabel = new JLabel();
     private final JLabel occupiedLabel = new JLabel();
@@ -292,31 +296,35 @@ public final class MainFrame extends JFrame {
         sentenceField.setEnabled(false);
         sentenceStatus.setText("Reading that...");
 
-        new SwingWorker<Optional<BookingProposal>, Void>() {
+        new SwingWorker<Outcome, Void>() {
             @Override
-            protected Optional<BookingProposal> doInBackground() {
+            protected Outcome doInBackground() {
                 LocalDate arrival = arrivalOnScreen();
-                Optional<BookingDraft> draft = parser.parse(typed);
-                return draft.flatMap(read ->
+                Optional<BookingProposal> resolved = parser.parse(typed).flatMap(read ->
                         new BookingResolver(hotelManager).resolve(read, typed, arrival));
+                if (resolved.isPresent()) {
+                    return new Outcome(resolved, true);
+                }
+                return new Outcome(resolved, ModelHealth.isAnswering(aiSettings));
             }
 
             @Override
             protected void done() {
                 sentenceField.setEnabled(true);
                 sentenceField.requestFocusInWindow();
-                Optional<BookingProposal> proposal;
+                Outcome outcome;
                 try {
-                    proposal = get();
+                    outcome = get();
                 } catch (Exception ex) {
-                    proposal = Optional.empty();
+                    outcome = new Outcome(Optional.empty(), true);
                 }
-                if (proposal.isEmpty()) {
-                    sentenceStatus.setText("Could not read that. Pick a room and fill the form as usual.");
+                if (outcome.proposal().isEmpty()) {
+                    sentenceStatus.setText(
+                            ModelHealth.messageWhenNothingCameBack(outcome.modelAnswered()));
                     return;
                 }
                 sentenceStatus.setText(" ");
-                openFromSentence(proposal.get());
+                openFromSentence(outcome.proposal().get());
             }
         }.execute();
     }

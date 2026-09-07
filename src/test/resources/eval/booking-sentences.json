@@ -946,6 +946,56 @@
         "nights": 3,
         "breakfast": false
       }
+    },
+    {
+      "sentence": "Hana jo 5 nights deluxe breakfast",
+      "note": "The sentence that exposed the copied guest count: 5 nights read as 5 guests, and no deluxe holds five",
+      "resolves": true,
+      "expected": {
+        "tier": "Deluxe",
+        "guestName": "Hana jo",
+        "nights": 5,
+        "breakfast": true
+      }
+    },
+    {
+      "sentence": "Marion jola 5 nights deluxe breakfast",
+      "note": "Same shape with a different name, to show the name was never the variable",
+      "resolves": true,
+      "expected": {
+        "tier": "Deluxe",
+        "guestName": "Marion jola",
+        "nights": 5,
+        "breakfast": true
+      }
+    },
+    {
+      "sentence": "deluxe 4 malam",
+      "note": "Four nights would not fit a deluxe as a guest count, and nobody asked for four guests",
+      "resolves": true,
+      "expected": {
+        "tier": "Deluxe",
+        "nights": 4
+      }
+    },
+    {
+      "sentence": "suite 6 nights",
+      "note": "Six exceeds even a suite, so a copied count would empty the tier",
+      "resolves": true,
+      "expected": {
+        "tier": "Suite",
+        "nights": 6
+      }
+    },
+    {
+      "sentence": "studio 3 nights sarapan",
+      "note": "Three nights against a studio that holds two",
+      "resolves": true,
+      "expected": {
+        "tier": "Studio",
+        "nights": 3,
+        "breakfast": true
+      }
     }
   ]
 }

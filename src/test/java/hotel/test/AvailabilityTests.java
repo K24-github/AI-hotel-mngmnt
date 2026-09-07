@@ -362,6 +362,37 @@ class AvailabilityTests {
         assertEquals(0, hotel.getUpgradeOptionsFor(booking).size(), "no options for a closed booking");
     }
 
+    // ------------------------------------------------- a guest who has not left
+
+    /**
+     * Booked one night, never checked out. The dates say the room is free from
+     * yesterday onwards, but there is still a person in it.
+     */
+    @Test
+    void aGuestPastTheirLastNightStillHoldsTheRoom() {
+        HotelManager hotel = new HotelManager();
+        Room room = hotel.findRoom("203").orElseThrow();
+        LocalDate today = LocalDate.now();
+        Booking booking = hotel.createReservation(room, "Raymond", "0812", null, today.minusDays(2), 1, 1);
+        hotel.checkIn(booking);
+
+        assertTrue(room.isOccupied(), "the guest never checked out");
+        assertFalse(hotel.isAvailable(room, today, today.plusDays(3)), "not free while someone is in it");
+        assertFalse(hotel.getAvailableRooms(today, today.plusDays(3)).contains(room), "and not offered");
+    }
+
+    @Test
+    void aRoomFreedByCheckOutIsAvailableAgain() {
+        HotelManager hotel = new HotelManager();
+        Room room = hotel.findRoom("204").orElseThrow();
+        LocalDate today = LocalDate.now();
+        Booking booking = hotel.createReservation(room, "Raymond", "0812", null, today.minusDays(2), 1, 1);
+        hotel.checkIn(booking);
+        hotel.checkOut(room);
+
+        assertTrue(hotel.isAvailable(room, today, today.plusDays(3)), "free once they have gone");
+    }
+
     @Test
     void collectionsAreNotMutableByCallers() {
         HotelManager hotel = new HotelManager();

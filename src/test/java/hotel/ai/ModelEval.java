@@ -31,20 +31,6 @@ public final class ModelEval {
     private ModelEval() {
     }
 
-    public static boolean ollamaIsUp(String endpoint) {
-        try {
-            HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
-            URI tags = URI.create(endpoint.replace("/api/generate", "/api/tags"));
-            HttpRequest request = HttpRequest.newBuilder(tags).timeout(Duration.ofSeconds(2)).GET().build();
-            return client.send(request, HttpResponse.BodyHandlers.ofString()).statusCode() == 200;
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            return false;
-        } catch (Exception ex) {
-            return false;
-        }
-    }
-
     /** The names Ollama actually has, so a typo fails the run instead of scoring the default. */
     public static List<String> installedModels(String endpoint) {
         try {

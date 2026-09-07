@@ -8,6 +8,7 @@ import hotel.service.HotelManager;
 
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDate;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -34,7 +35,9 @@ class BookingResolverTests {
         BookingDraft draft = BookingDraft.builder()
                 .roomNumber("201").tier("Deluxe").guests(2).nights(2).breakfast(true).build();
 
-        BookingProposal proposal = resolve(hotel, draft).orElseThrow();
+        BookingProposal proposal = resolve(hotel, draft,
+                "Make a booking at room 201 deluxe for 2 guests for 2 nights, breakfast included")
+                .orElseThrow();
 
         assertEquals(hotel.findRoom("201").orElseThrow(), proposal.room(), "room 201 found");
         assertEquals(2, proposal.guests(), "guests carried");
@@ -155,23 +158,166 @@ class BookingResolverTests {
 
     // ------------------------------------------------------------------ capacity
 
+    /**
+     * "Hana jo 5 nights deluxe breakfast" came back with guests=5, copied off the nights.
+     * Five will not fit any deluxe, so every deluxe was filtered out and a booking the
+     * clerk plainly asked for was refused. No guest word, no guest count.
+     */
+    @Test
+    void aGuestCountTheSentenceNeverGaveIsIgnored() {
+        HotelManager hotel = new HotelManager();
+        BookingDraft draft = BookingDraft.builder().tier("Deluxe").guests(5).nights(5).breakfast(true).build();
+
+        BookingProposal proposal =
+                resolve(hotel, draft, "Hana jo 5 nights deluxe breakfast").orElseThrow();
+
+        assertEquals("Deluxe", proposal.room().getTierName(), "a deluxe was still found");
+        assertNull(proposal.guests(), "the invented count was dropped");
+        assertEquals(5, proposal.nights(), "the nights were real");
+    }
+
+    // ------------------------------------------- night counts the sentence never gave
+
+    /**
+     * An invented night count widens the window the resolver checks, so a room that was
+     * free for the stay the clerk asked for gets ruled out. Same shape as the guests bug.
+     */
+    @Test
+    void aNightCountWithNoNightWordCannotDenyARoom() {
+        HotelManager hotel = new HotelManager();
+        for (Room deluxe : hotel.getRoomsByTier("Deluxe")) {
+            hotel.createReservation(deluxe, "Someone", "0812", null, LocalDate.now().plusDays(3), 2, 1);
+        }
+
+        assertTrue(resolve(hotel, BookingDraft.builder().tier("Deluxe").nights(9).build(),
+                "deluxe untuk pak Budi").isPresent(), "nine nights was never asked for");
+    }
+
+    @Test
+    void aNightCountWithANightWordIsKept() {
+        HotelManager hotel = new HotelManager();
+
+        assertEquals(3, resolve(hotel, BookingDraft.builder().roomNumber("201").nights(3).build(),
+                "kamar 201 3 malam").orElseThrow().nights(), "malam");
+        assertEquals(2, resolve(hotel, BookingDraft.builder().roomNumber("201").nights(2).build(),
+                "room 201 2 nights").orElseThrow().nights(), "nights");
+        assertEquals(1, resolve(hotel, BookingDraft.builder().roomNumber("212").nights(1).build(),
+                "kamar 212 utk bpk Hendra, 1 mlm").orElseThrow().nights(), "mlm");
+        assertEquals(2, resolve(hotel, BookingDraft.builder().roomNumber("201").nights(2).build(),
+                "kamar 201 2 hari").orElseThrow().nights(), "hari");
+    }
+
+    @Test
+    void aWordThatMerelyContainsANightWordDoesNotCount() {
+        HotelManager hotel = new HotelManager();
+
+        assertNull(resolve(hotel, BookingDraft.builder().roomNumber("201").nights(2).build(),
+                "kamar 201 untuk 2 harimau").orElseThrow().nights(), "harimau is not hari");
+        assertNull(resolve(hotel, BookingDraft.builder().roomNumber("201").nights(2).build(),
+                "room 201 nightclub voucher").orElseThrow().nights(), "nightclub is not night");
+    }
+
+    // ------------------------------------------- guest counts the sentence never gave
+
+    /** Studio holds 2, Deluxe 3, Suite 5. An invented count must never rule a room out. */
+    @Test
+    void aCountWithNoGuestWordIsDroppedWhateverTheTier() {
+        HotelManager hotel = new HotelManager();
+
+        assertNull(resolve(hotel, BookingDraft.builder().tier("Deluxe").guests(4).nights(4).build(),
+                "deluxe 4 malam").orElseThrow().guests(), "four nights is not four guests");
+        assertNull(resolve(hotel, BookingDraft.builder().roomNumber("202").guests(2).nights(2).build(),
+                "kamar 202 untuk dua malam").orElseThrow().guests(), "spelled-out nights copied");
+        assertNull(resolve(hotel, BookingDraft.builder().tier("Studio").guests(3).nights(3).build(),
+                "3 malam studio").orElseThrow().guests(), "three nights is not three people");
+        assertNull(resolve(hotel, BookingDraft.builder().roomNumber("303").guests(2).nights(2).build(),
+                "room 303 2 nights").orElseThrow().guests(), "no guest word in English either");
+    }
+
+    /** The count would not fit, but nothing in the sentence asked for it, so it cannot deny. */
+    @Test
+    void anInventedCountCannotEmptyAWholeTier() {
+        HotelManager hotel = new HotelManager();
+
+        assertTrue(resolve(hotel, BookingDraft.builder().tier("Studio").guests(9).nights(9).build(),
+                "studio 9 nights").isPresent(), "nine will not fit a studio, but nobody asked for nine");
+        assertTrue(resolve(hotel, BookingDraft.builder().roomNumber("101").guests(4).nights(4).build(),
+                "kamar 101 4 malam").isPresent(), "a named room survives it too");
+    }
+
+    /** A count the clerk really typed still rules rooms out, in either language. */
+    @Test
+    void aCountWithAGuestWordIsStillHonoured() {
+        HotelManager hotel = new HotelManager();
+
+        assertTrue(resolve(hotel, BookingDraft.builder().tier("Studio").guests(6).nights(2).build(),
+                "studio 6 orang 2 nights").isEmpty(), "orang");
+        assertTrue(resolve(hotel, BookingDraft.builder().roomNumber("101").guests(4).nights(2).build(),
+                "room 101 for 4 people 2 nights").isEmpty(), "people");
+        assertTrue(resolve(hotel, BookingDraft.builder().roomNumber("204").guests(4).nights(2).build(),
+                "room 204 for 4 guests 2 nights").isEmpty(), "guests");
+        assertTrue(resolve(hotel, BookingDraft.builder().tier("Suite").guests(6).nights(2).build(),
+                "suite 6 tamu 2 malam").isEmpty(), "tamu, and no suite holds six");
+
+        assertEquals(2, resolve(hotel, BookingDraft.builder().roomNumber("201").guests(2).nights(2).build(),
+                "201 deluxe 2 tamu 2 malam").orElseThrow().guests(), "a real count is carried");
+        assertEquals(2, resolve(hotel, BookingDraft.builder().roomNumber("305").guests(2).nights(3).build(),
+                "room 305 Ms Lim 3 nights 2 pax").orElseThrow().guests(), "pax");
+        assertEquals(5, resolve(hotel, BookingDraft.builder().tier("Suite").guests(5).nights(1).build(),
+                "suite untuk 5 orang").orElseThrow().guests(), "five fits a suite exactly");
+    }
+
+    @Test
+    void guestWordsAreMatchedWhateverTheCase() {
+        HotelManager hotel = new HotelManager();
+
+        assertEquals(2, resolve(hotel, BookingDraft.builder().roomNumber("201").guests(2).nights(2).build(),
+                "kamar 201 2 ORANG 2 malam").orElseThrow().guests(), "shouting still counts");
+        assertEquals(2, resolve(hotel, BookingDraft.builder().roomNumber("201").guests(2).nights(1).build(),
+                "room 201 2 Pax").orElseThrow().guests(), "mixed case");
+    }
+
+    /** "org" inside "organise" is not a guest word. Neither is "person" inside "personal". */
+    @Test
+    void aWordThatMerelyContainsAGuestWordDoesNotCount() {
+        HotelManager hotel = new HotelManager();
+
+        assertNull(resolve(hotel, BookingDraft.builder().roomNumber("201").guests(2).nights(2).build(),
+                "kamar 201 2 malam, organise a taxi").orElseThrow().guests(), "organise");
+        assertNull(resolve(hotel, BookingDraft.builder().roomNumber("201").guests(2).nights(2).build(),
+                "room 201 2 nights personal request").orElseThrow().guests(), "personal");
+        assertNull(resolve(hotel, BookingDraft.builder().roomNumber("201").guests(2).nights(2).build(),
+                "room 201 2 nights guesthouse transfer").orElseThrow().guests(), "guesthouse");
+    }
+
+    /** The note is the clerk's own text and is cut before the count is checked against it. */
+    @Test
+    void aGuestWordInsideTheNoteDoesNotCount() {
+        HotelManager hotel = new HotelManager();
+
+        assertNull(resolve(hotel, BookingDraft.builder().roomNumber("201").guests(4).nights(2).build(),
+                "kamar 201 2 malam note: 4 orang datang jam 9").orElseThrow().guests(),
+                "the guest word is only in the note");
+    }
+
     @Test
     void aPartyTooBigForTheNamedRoomRejectsTheDraft() {
         HotelManager hotel = new HotelManager();
         BookingDraft draft = BookingDraft.builder().roomNumber("101").guests(4).build();
 
         assertEquals(2, hotel.findRoom("101").orElseThrow().getCapacity(), "studio holds two");
-        assertTrue(resolve(hotel, draft).isEmpty(), "four guests in a studio");
+        assertTrue(resolve(hotel, draft, "kamar 101 untuk 4 orang").isEmpty(),
+                "four guests in a studio");
     }
 
     /** No room named, but no studio in the hotel could hold them either. */
     @Test
     void aPartyTooBigForTheWholeTierRejectsTheDraft() {
         HotelManager hotel = new HotelManager();
-        assertTrue(resolve(hotel, BookingDraft.builder().tier("Studio").guests(4).build()).isEmpty(),
-                "no studio holds four");
-        assertTrue(resolve(hotel, BookingDraft.builder().tier("Suite").guests(4).build()).isPresent(),
-                "a suite does");
+        assertTrue(resolve(hotel, BookingDraft.builder().tier("Studio").guests(4).build(),
+                "studio untuk 4 orang").isEmpty(), "no studio holds four");
+        assertTrue(resolve(hotel, BookingDraft.builder().tier("Suite").guests(4).build(),
+                "suite untuk 4 orang").isPresent(), "a suite does");
     }
 
     @Test
@@ -188,7 +334,7 @@ class BookingResolverTests {
         HotelManager hotel = new HotelManager();
         BookingDraft draft = BookingDraft.builder().tier("Deluxe").guests(2).nights(2).build();
 
-        BookingProposal proposal = resolve(hotel, draft).orElseThrow();
+        BookingProposal proposal = resolve(hotel, draft, "deluxe 2 orang 2 malam").orElseThrow();
 
         assertEquals("Deluxe", proposal.room().getTierName(), "and it is the tier that was asked for");
         assertEquals("201", proposal.room().getRoomNumber(), "the lowest free one");

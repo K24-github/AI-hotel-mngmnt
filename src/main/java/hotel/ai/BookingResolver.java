@@ -7,8 +7,14 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 public final class BookingResolver {
+    private static final Pattern GUEST_WORD = Pattern.compile(
+            "\\b(orang|org|tamu|pax|px|guests?|people|person)\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern NIGHT_WORD = Pattern.compile(
+            "\\b(malam|mlm|nights?|nt|hari)\\b", Pattern.CASE_INSENSITIVE);
+
     private final HotelManager hotel;
 
     public BookingResolver(HotelManager hotel) {
@@ -27,15 +33,15 @@ public final class BookingResolver {
             return Optional.empty();
         }
 
-        Integer guests = atLeastOne(draft.guests());
-        Integer nights = atLeastOne(draft.nights());
+        String beforeTheNote = Notes.withoutNote(typedText);
+        Integer guests = atLeastOne(backedBy(GUEST_WORD, draft.guests(), beforeTheNote));
+        Integer nights = atLeastOne(backedBy(NIGHT_WORD, draft.nights(), beforeTheNote));
 
         Optional<Room> room = roomFor(draft, guests, nights, arrival);
         if (room.isEmpty()) {
             return Optional.empty();
         }
 
-        String beforeTheNote = Notes.withoutNote(typedText);
         return Optional.of(new BookingProposal(
                 room.get(),
                 appearingIn(draft.guestName(), beforeTheNote),
@@ -57,6 +63,18 @@ public final class BookingResolver {
             return (tier == null) ? Optional.empty() : firstFreeRoom(tier, guests, nights, arrival);
         }
         return Optional.empty();
+    }
+
+    /**
+     * A count with no unit word behind it was copied from elsewhere in the sentence, the
+     * guests off the nights or the other way round. Trusting it lets an invented number
+     * rule out every room in a tier and deny a booking the clerk really asked for.
+     */
+    private static Integer backedBy(Pattern unitWord, Integer count, String typedText) {
+        if (count == null || typedText == null) {
+            return null;
+        }
+        return unitWord.matcher(typedText).find() ? count : null;
     }
 
     /** A name the clerk never typed was invented, so it is dropped rather than trusted. */

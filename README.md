@@ -110,8 +110,8 @@ checks the room actually exists, so if the model invents room 999 it goes nowher
 Capacity catches four people in a studio. A room that's already taken, or free
 tonight but booked later in the stay, gets caught before the dialog opens and again
 when the booking is saved, by the same rules that reject a bad manual entry. A guest
-name is only
-kept if it appears in what the clerk typed, so a name the model made up gets dropped.
+name is only kept if it appears in what the clerk typed, so a name the model made up
+gets dropped.
 If a room number doesn't exist but a tier does, it falls back to the first free room
 in that tier instead of giving up.
 
