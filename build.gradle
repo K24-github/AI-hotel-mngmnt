@@ -63,8 +63,12 @@ tasks.register('evalModels', Test) {
 
 tasks.named('run') {
     workingDir = rootDir
-    // The app runs in a forked JVM, so -Dhotel.data has to be handed across explicitly.
-    if (System.getProperty('hotel.data') != null) {
-        systemProperty 'hotel.data', System.getProperty('hotel.data')
+    // The app runs in a forked JVM, so every -D setting has to be handed across explicitly.
+    ['hotel.data', 'hotel.ai.model', 'hotel.ai.endpoint', 'hotel.ai.contextTokens',
+     'hotel.ai.replyTokens', 'hotel.ai.keepAlive', 'hotel.ai.timeoutSeconds',
+     'hotel.ai.gpuLayers'].each { key ->
+        if (System.getProperty(key) != null) {
+            systemProperty key, System.getProperty(key)
+        }
     }
 }

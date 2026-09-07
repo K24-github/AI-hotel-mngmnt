@@ -1,5 +1,6 @@
 package hotel.ai;
 
+import java.net.URI;
 import java.time.Duration;
 
 public record OllamaConfig(String endpoint, String model, String promptTemplate,
@@ -35,11 +36,46 @@ public record OllamaConfig(String endpoint, String model, String promptTemplate,
         if (endpoint == null || endpoint.isBlank()) {
             throw new IllegalArgumentException("An Ollama endpoint is required.");
         }
+        if (!inThisBuilding(endpoint)) {
+            throw new IllegalArgumentException(
+                    "Guest details never leave the building, so the endpoint must be this machine "
+                            + "or your own network: " + endpoint);
+        }
         if (model == null || model.isBlank()) {
             throw new IllegalArgumentException("A model name is required.");
         }
         if (promptTemplate == null || !promptTemplate.contains("%s")) {
             throw new IllegalArgumentException("The prompt template must have a %s for the sentence.");
+        }
+    }
+
+    /** This machine or one on the same private network. A public address would send guests abroad. */
+    private static boolean inThisBuilding(String endpoint) {
+        try {
+            String host = URI.create(endpoint).getHost();
+            if (host == null) {
+                return false;
+            }
+            return "localhost".equals(host) || "127.0.0.1".equals(host) || "[::1]".equals(host)
+                    || isPrivateNetwork(host);
+        } catch (RuntimeException ex) {
+            return false;
+        }
+    }
+
+    private static boolean isPrivateNetwork(String host) {
+        String[] parts = host.split("\\.");
+        if (parts.length != 4) {
+            return false;
+        }
+        try {
+            int first = Integer.parseInt(parts[0]);
+            int second = Integer.parseInt(parts[1]);
+            return first == 10
+                    || (first == 192 && second == 168)
+                    || (first == 172 && second >= 16 && second <= 31);
+        } catch (NumberFormatException ex) {
+            return false;
         }
     }
 

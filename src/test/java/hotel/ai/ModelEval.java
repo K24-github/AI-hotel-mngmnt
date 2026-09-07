@@ -45,8 +45,31 @@ public final class ModelEval {
         }
     }
 
+    /** The names Ollama actually has, so a typo fails the run instead of scoring the default. */
+    public static List<String> installedModels(String endpoint) {
+        try {
+            HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
+            URI tags = URI.create(endpoint.replace("/api/generate", "/api/tags"));
+            HttpRequest request = HttpRequest.newBuilder(tags).timeout(Duration.ofSeconds(2)).GET().build();
+            String body = client.send(request, HttpResponse.BodyHandlers.ofString()).body();
+            List<String> names = new ArrayList<>();
+            for (com.fasterxml.jackson.databind.JsonNode node
+                    : new com.fasterxml.jackson.databind.ObjectMapper().readTree(body).path("models")) {
+                names.add(node.path("name").asText());
+            }
+            return names;
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            return List.of();
+        } catch (Exception ex) {
+            return List.of();
+        }
+    }
+
     public static Report run(OllamaConfig config, List<EvalSet.Row> rows) {
+        evictEveryModel(config.endpoint());
         BookingParser parser = new OllamaBookingParser(config);
+        parser.parse("kamar 101 1 malam");
         Map<String, int[]> tally = new LinkedHashMap<>();
         for (String field : List.of("roomNumber", "tier", "guests", "nights", "breakfast", "guestName")) {
             tally.put(field, new int[2]);
@@ -92,6 +115,39 @@ public final class ModelEval {
         return new Report(config.model(), fields, resolveAgreements, rows.size(),
                 percentile(timings, 50), percentile(timings, 95), emptyReplies,
                 placementOf(config), misses);
+    }
+
+    /**
+     * Sends every resident model home before a run. Two models of this size do not fit in
+     * VRAM together, so whatever ran last would otherwise push this one onto the CPU and
+     * show up as the new model being slower.
+     */
+    public static void evictEveryModel(String endpoint) {
+        try {
+            HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
+            URI ps = URI.create(endpoint.replace("/api/generate", "/api/ps"));
+            HttpRequest listing = HttpRequest.newBuilder(ps).timeout(Duration.ofSeconds(2)).GET().build();
+            String body = client.send(listing, HttpResponse.BodyHandlers.ofString()).body();
+            for (com.fasterxml.jackson.databind.JsonNode node
+                    : new com.fasterxml.jackson.databind.ObjectMapper().readTree(body).path("models")) {
+                evict(client, endpoint, node.path("name").asText());
+            }
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+        } catch (Exception ignored) {
+            // A model we cannot see is a model we cannot evict; the run still reports its placement.
+        }
+    }
+
+    private static void evict(HttpClient client, String endpoint, String model)
+            throws java.io.IOException, InterruptedException {
+        String body = "{\"model\":\"" + model + "\",\"keep_alive\":0}";
+        HttpRequest request = HttpRequest.newBuilder(URI.create(endpoint))
+                .timeout(Duration.ofSeconds(10))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build();
+        client.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
     /** Whether the model sat in VRAM or on the CPU, which moves latency by a third. */

@@ -14,6 +14,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 @EnabledIfSystemProperty(named = "hotel.ai.eval", matches = "true")
@@ -27,6 +28,12 @@ class ModelEvalTests {
         List<EvalSet.Row> rows = EvalSet.load();
         List<String> models = List.of(System.getProperty("hotel.ai.models",
                 OllamaConfig.DEFAULT_MODEL).split(","));
+
+        List<String> installed = ModelEval.installedModels(base.endpoint());
+        for (String model : models) {
+            assertTrue(installed.contains(model.trim()),
+                    "Model not installed: " + model.trim() + ". Ollama has: " + installed);
+        }
 
         List<String> report = new ArrayList<>();
         report.add("Eval set: " + rows.size() + " sentences");
