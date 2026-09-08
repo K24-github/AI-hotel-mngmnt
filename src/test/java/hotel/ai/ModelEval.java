@@ -1,5 +1,9 @@
 package hotel.ai;
 
+import dev.langchain4j.model.ollama.OllamaModel;
+import dev.langchain4j.model.ollama.OllamaModels;
+import dev.langchain4j.model.ollama.RunningOllamaModel;
+
 import hotel.service.HotelManager;
 
 import java.net.URI;
@@ -16,6 +20,9 @@ import java.util.Objects;
 import java.util.Optional;
 
 public final class ModelEval {
+
+    private static final Duration REACH_TIMEOUT = Duration.ofSeconds(2);
+    private static final String QUOTE = String.valueOf((char) 34);
 
     public record FieldScore(String field, int right, int scored) {
         public double percent() {
@@ -34,19 +41,11 @@ public final class ModelEval {
     /** The names Ollama actually has, so a typo fails the run instead of scoring the default. */
     public static List<String> installedModels(String endpoint) {
         try {
-            HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
-            URI tags = URI.create(endpoint.replace("/api/generate", "/api/tags"));
-            HttpRequest request = HttpRequest.newBuilder(tags).timeout(Duration.ofSeconds(2)).GET().build();
-            String body = client.send(request, HttpResponse.BodyHandlers.ofString()).body();
             List<String> names = new ArrayList<>();
-            for (com.fasterxml.jackson.databind.JsonNode node
-                    : new com.fasterxml.jackson.databind.ObjectMapper().readTree(body).path("models")) {
-                names.add(node.path("name").asText());
+            for (OllamaModel model : listingOn(endpoint).availableModels().content()) {
+                names.add(model.getName());
             }
             return names;
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            return List.of();
         } catch (Exception ex) {
             return List.of();
         }
@@ -54,7 +53,7 @@ public final class ModelEval {
 
     public static Report run(OllamaConfig config, List<EvalSet.Row> rows) {
         evictEveryModel(config.endpoint());
-        BookingParser parser = new OllamaBookingParser(config);
+        BookingParser parser = new LangChainBookingParser(config);
         parser.parse("kamar 101 1 malam");
         Map<String, int[]> tally = new LinkedHashMap<>();
         for (String field : List.of("roomNumber", "tier", "guests", "nights", "breakfast", "guestName")) {
@@ -107,16 +106,16 @@ public final class ModelEval {
      * Sends every resident model home before a run. Two models of this size do not fit in
      * VRAM together, so whatever ran last would otherwise push this one onto the CPU and
      * show up as the new model being slower.
+     *
+     * <p>Listing the resident models is a LangChain4j call. Unloading one is not: its Ollama
+     * client has no unload, and reaching keep_alive through a chat would load the model
+     * first, which is the opposite of what this is for.
      */
     public static void evictEveryModel(String endpoint) {
         try {
-            HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
-            URI ps = URI.create(endpoint.replace("/api/generate", "/api/ps"));
-            HttpRequest listing = HttpRequest.newBuilder(ps).timeout(Duration.ofSeconds(2)).GET().build();
-            String body = client.send(listing, HttpResponse.BodyHandlers.ofString()).body();
-            for (com.fasterxml.jackson.databind.JsonNode node
-                    : new com.fasterxml.jackson.databind.ObjectMapper().readTree(body).path("models")) {
-                evict(client, endpoint, node.path("name").asText());
+            HttpClient client = HttpClient.newBuilder().connectTimeout(REACH_TIMEOUT).build();
+            for (RunningOllamaModel resident : listingOn(endpoint).runningModels().content()) {
+                evict(client, endpoint, resident.getName());
             }
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
@@ -127,7 +126,7 @@ public final class ModelEval {
 
     private static void evict(HttpClient client, String endpoint, String model)
             throws java.io.IOException, InterruptedException {
-        String body = "{\"model\":\"" + model + "\",\"keep_alive\":0}";
+        String body = "{" + quoted("model") + ":" + quoted(model) + "," + quoted("keep_alive") + ":0}";
         HttpRequest request = HttpRequest.newBuilder(URI.create(endpoint))
                 .timeout(Duration.ofSeconds(10))
                 .header("Content-Type", "application/json")
@@ -136,29 +135,33 @@ public final class ModelEval {
         client.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
+    private static String quoted(String value) {
+        return QUOTE + value + QUOTE;
+    }
+
     /** Whether the model sat in VRAM or on the CPU, which moves latency by a third. */
     public static String placementOf(OllamaConfig config) {
         try {
-            HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
-            URI ps = URI.create(config.endpoint().replace("/api/generate", "/api/ps"));
-            HttpRequest request = HttpRequest.newBuilder(ps).timeout(Duration.ofSeconds(2)).GET().build();
-            String body = client.send(request, HttpResponse.BodyHandlers.ofString()).body();
-            for (com.fasterxml.jackson.databind.JsonNode node
-                    : new com.fasterxml.jackson.databind.ObjectMapper().readTree(body).path("models")) {
-                if (config.model().equals(node.path("name").asText())) {
-                    long total = node.path("size").asLong();
-                    long inVram = node.path("size_vram").asLong();
+            for (RunningOllamaModel resident : listingOn(config.endpoint()).runningModels().content()) {
+                if (config.model().equals(resident.getName())) {
+                    long total = (resident.getSize() == null) ? 0 : resident.getSize();
+                    long inVram = (resident.getSizeVram() == null) ? 0 : resident.getSizeVram();
                     long percent = (total == 0) ? 0 : Math.round((100.0 * inVram) / total);
                     return percent + "% GPU / " + (100 - percent) + "% CPU";
                 }
             }
             return "not resident";
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            return "unknown";
         } catch (Exception ex) {
             return "unknown";
         }
+    }
+
+    private static OllamaModels listingOn(String endpoint) {
+        return OllamaModels.builder()
+                .baseUrl(OllamaConfig.baseUrlOf(endpoint))
+                .timeout(REACH_TIMEOUT)
+                .maxRetries(1)
+                .build();
     }
 
     private static void score(Map<String, int[]> tally, String field, boolean right) {

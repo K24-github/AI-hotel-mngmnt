@@ -1,9 +1,7 @@
 package hotel.ai;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+import dev.langchain4j.model.ollama.OllamaModels;
+
 import java.time.Duration;
 
 public final class ModelHealth {
@@ -24,21 +22,26 @@ public final class ModelHealth {
     }
 
     public static boolean isAnswering(OllamaConfig config) {
-        return config != null && isAnswering(config.endpoint());
+        return config != null && reachable(config.baseUrl());
     }
 
     public static boolean isAnswering(String endpoint) {
-        if (endpoint == null) {
+        return reachable(OllamaConfig.baseUrlOf(endpoint));
+    }
+
+    /** Ollama lists its models whether or not one is loaded, and that listing is the question. */
+    private static boolean reachable(String baseUrl) {
+        if (baseUrl == null) {
             return false;
         }
         try {
-            HttpClient client = HttpClient.newBuilder().connectTimeout(REACH_TIMEOUT).build();
-            URI tags = URI.create(endpoint.replace("/api/generate", "/api/tags"));
-            HttpRequest request = HttpRequest.newBuilder(tags).timeout(REACH_TIMEOUT).GET().build();
-            return client.send(request, HttpResponse.BodyHandlers.ofString()).statusCode() == 200;
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            return false;
+            return OllamaModels.builder()
+                    .baseUrl(baseUrl)
+                    .timeout(REACH_TIMEOUT)
+                    .maxRetries(1)
+                    .build()
+                    .availableModels()
+                    .content() != null;
         } catch (Exception ex) {
             return false;
         }

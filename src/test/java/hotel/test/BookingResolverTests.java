@@ -125,6 +125,8 @@ class BookingResolverTests {
         BookingDraft draft = BookingDraft.builder().roomNumber("999").guests(2).nights(2).build();
 
         assertTrue(resolve(hotel, draft).isEmpty(), "room 999 does not exist");
+        assertEquals("There is no room 999 here.", refusalFor(hotel, draft, ""),
+                "and the clerk is told which room is missing");
     }
 
     @Test
@@ -141,8 +143,11 @@ class BookingResolverTests {
     @Test
     void anInventedTierRejectsTheDraft() {
         HotelManager hotel = new HotelManager();
-        assertTrue(resolve(hotel, BookingDraft.builder().tier("Penthouse").build()).isEmpty(),
-                "this hotel has no penthouse");
+        BookingDraft draft = BookingDraft.builder().tier("Penthouse").build();
+
+        assertTrue(resolve(hotel, draft).isEmpty(), "this hotel has no penthouse");
+        assertEquals("There is no room type called Penthouse.", refusalFor(hotel, draft, ""),
+                "and the clerk is told which type is missing");
     }
 
     @Test
@@ -325,6 +330,9 @@ class BookingResolverTests {
         assertEquals(2, hotel.findRoom("101").orElseThrow().getCapacity(), "studio holds two");
         assertTrue(resolve(hotel, draft, "kamar 101 untuk 4 orang").isEmpty(),
                 "four guests in a studio");
+        assertEquals("Room 101 is a Studio and holds 2, not 4. A Suite holds 5.",
+                refusalFor(hotel, draft, "kamar 101 untuk 4 orang"),
+                "and the clerk is told the size and one that fits");
     }
 
     /** No room named, but no studio in the hotel could hold them either. */
@@ -512,5 +520,52 @@ class BookingResolverTests {
                 "booking kamar 201 untuk 2 orang 2 malam").orElseThrow();
 
         assertNull(proposal.guestName(), "a name nobody typed is not trusted");
+    }
+
+    // ------------------------------------------------- saying why, not just no
+
+    private static String refusalFor(HotelManager hotel, BookingDraft draft, String typed) {
+        return new BookingResolver(hotel).attempt(draft, typed, LocalDate.now()).refusal();
+    }
+
+    /** "5 mlm Hana Jo 4 guests 5551231 deluxe" reads perfectly and still cannot be booked. */
+    @Test
+    void aTierTooSmallForThePartySaysSoAndNamesOneThatFits() {
+        String refusal = refusalFor(new HotelManager(),
+                BookingDraft.builder().tier("Deluxe").guests(4).nights(5).build(),
+                "5 mlm Hana Jo 4 guests deluxe");
+
+        assertEquals("A Deluxe holds 3, not 4. A Suite holds 5.", refusal, "says which and why");
+    }
+
+    @Test
+    void aSentenceWithNoRoomAndNoTierSaysThat() {
+        String refusal = refusalFor(new HotelManager(),
+                BookingDraft.builder().guests(2).nights(3).build(),
+                "2 orang 3 malam");
+
+        assertEquals("That does not say which room or which kind of room.", refusal,
+                "asks for a room or a room type");
+    }
+
+    /** A booking that works has nothing to explain. */
+    @Test
+    void aProposalCarriesNoRefusal() {
+        BookingResolver.Resolution resolution = new BookingResolver(new HotelManager()).attempt(
+                BookingDraft.builder().roomNumber("201").guests(2).nights(2).build(),
+                "kamar 201 2 orang 2 malam", LocalDate.now());
+
+        assertNull(resolution.refusal(), "nothing went wrong, so nothing to say");
+        assertTrue(resolution.proposal() != null, "the proposal is there");
+    }
+
+    /** An empty draft is the model failing, not the booking, so the resolver stays quiet. */
+    @Test
+    void anEmptyDraftIsNotTheResolversToExplain() {
+        BookingResolver.Resolution resolution = new BookingResolver(new HotelManager())
+                .attempt(BookingDraft.empty(), "asdfgh", LocalDate.now());
+
+        assertNull(resolution.proposal(), "nothing proposed");
+        assertNull(resolution.refusal(), "and no reason of ours to give");
     }
 }

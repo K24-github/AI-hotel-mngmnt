@@ -4,16 +4,15 @@ import hotel.model.Room;
 import hotel.service.HotelManager;
 
 import java.time.LocalDate;
+import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
-import java.util.regex.Pattern;
 
+/**
+ * The trust boundary. A draft is a claim about the sentence; this turns the claims that
+ * survive checking into a proposal, and drops the ones the sentence never made.
+ */
 public final class BookingResolver {
-    private static final Pattern GUEST_WORD = Pattern.compile(
-            "\\b(orang|org|tamu|pax|px|guests?|people|person)\\b", Pattern.CASE_INSENSITIVE);
-    private static final Pattern NIGHT_WORD = Pattern.compile(
-            "\\b(malam|mlm|nights?|nt|hari|weeks?|minggu|seminggu)\\b", Pattern.CASE_INSENSITIVE);
 
     private final HotelManager hotel;
 
@@ -29,60 +28,102 @@ public final class BookingResolver {
     }
 
     public Optional<BookingProposal> resolve(BookingDraft draft, String typedText, LocalDate arrival) {
-        if (draft == null || draft.isEmpty()) {
-            return Optional.empty();
-        }
-
-        String beforeTheNote = Notes.withoutNote(typedText);
-        Integer guests = atLeastOne(backedBy(GUEST_WORD, draft.guests(), beforeTheNote));
-        Integer nights = atLeastOne(backedBy(NIGHT_WORD, draft.nights(), beforeTheNote));
-
-        Optional<Room> room = roomFor(draft, guests, nights, arrival);
-        if (room.isEmpty()) {
-            return Optional.empty();
-        }
-
-        return Optional.of(new BookingProposal(
-                room.get(),
-                appearingIn(draft.guestName(), beforeTheNote),
-                PhoneNumbers.findIn(beforeTheNote).orElse(null),
-                nights, guests,
-                draft.wantsBreakfast(),
-                Notes.noteIn(typedText).orElse(null)));
-    }
-
-    private Optional<Room> roomFor(BookingDraft draft, Integer guests, Integer nights, LocalDate arrival) {
-        if (draft.roomNumber() != null) {
-            Optional<Room> named = hotel.findRoom(draft.roomNumber());
-            if (named.isPresent()) {
-                return named.filter(room -> guests == null || guests <= room.getCapacity());
-            }
-        }
-        if (draft.tier() != null) {
-            String tier = canonicalTier(draft.tier());
-            return (tier == null) ? Optional.empty() : firstFreeRoom(tier, guests, nights, arrival);
-        }
-        return Optional.empty();
+        return Optional.ofNullable(attempt(draft, typedText, arrival).proposal());
     }
 
     /**
-     * A count with no unit word behind it was copied from elsewhere in the sentence, the
-     * guests off the nights or the other way round. Trusting it lets an invented number
-     * rule out every room in a tier and deny a booking the clerk really asked for.
+     * A proposal, or the reason there is not one. Read the sentence right and still refuse it,
+     * and the clerk needs to know which: four guests in a Deluxe is a different problem from a
+     * sentence that never said which room, and both used to come out as could not read that.
+     *
+     * <p>A null refusal means the draft had nothing in it worth checking, which is the model
+     * failing rather than the booking.
      */
-    private static Integer backedBy(Pattern unitWord, Integer count, String typedText) {
-        if (count == null || typedText == null) {
-            return null;
+    public Resolution attempt(BookingDraft draft, String typedText, LocalDate arrival) {
+        if (draft == null || draft.isEmpty()) {
+            return new Resolution(null, null);
         }
-        return unitWord.matcher(typedText).find() ? count : null;
+
+        String beforeTheNote = Notes.withoutNote(typedText);
+        Integer guests = atLeastOne(SentenceEvidence.guestsBackedBy(beforeTheNote, draft.guests()));
+        Integer nights = atLeastOne(SentenceEvidence.nightsBackedBy(beforeTheNote, draft.nights()));
+
+        RoomChoice choice = roomFor(draft, guests, nights, arrival);
+        if (choice.room() == null) {
+            return new Resolution(null, choice.refusal());
+        }
+
+        return new Resolution(new BookingProposal(
+                choice.room(),
+                SentenceEvidence.appearingIn(draft.guestName(), beforeTheNote),
+                PhoneNumbers.findIn(beforeTheNote).orElse(null),
+                nights, guests,
+                draft.wantsBreakfast(),
+                Notes.noteIn(typedText).orElse(null)), null);
     }
 
-    /** A name the clerk never typed was invented, so it is dropped rather than trusted. */
-    private static String appearingIn(String name, String typedText) {
-        if (name == null || typedText == null) {
-            return null;
+    /** Either a proposal or a sentence explaining why the booking was turned down. */
+    public record Resolution(BookingProposal proposal, String refusal) {
+    }
+
+    private record RoomChoice(Room room, String refusal) {
+        static RoomChoice found(Room room) {
+            return new RoomChoice(room, null);
         }
-        return typedText.toLowerCase(Locale.ROOT).contains(name.toLowerCase(Locale.ROOT)) ? name : null;
+
+        static RoomChoice refused(String reason) {
+            return new RoomChoice(null, reason);
+        }
+    }
+
+    private RoomChoice roomFor(BookingDraft draft, Integer guests, Integer nights, LocalDate arrival) {
+        if (draft.roomNumber() != null) {
+            Optional<Room> named = hotel.findRoom(draft.roomNumber());
+            if (named.isPresent()) {
+                Room room = named.get();
+                return (guests == null || guests <= room.getCapacity())
+                        ? RoomChoice.found(room)
+                        : RoomChoice.refused("Room " + room.getRoomNumber() + " is a "
+                                + room.getTierName() + " and holds " + room.getCapacity()
+                                + ", not " + guests + "." + alsoTry(guests));
+            }
+            if (draft.tier() == null) {
+                return RoomChoice.refused("There is no room " + draft.roomNumber() + " here.");
+            }
+        }
+        if (draft.tier() == null) {
+            return RoomChoice.refused("That does not say which room or which kind of room.");
+        }
+
+        String tier = canonicalTier(draft.tier());
+        if (tier == null) {
+            return RoomChoice.refused("There is no room type called " + draft.tier() + ".");
+        }
+        return roomInTier(tier, guests, nights, arrival);
+    }
+
+    private RoomChoice roomInTier(String tier, Integer guests, Integer nights, LocalDate arrival) {
+        List<Room> inTier = hotel.getRoomsByTier(tier);
+        if (guests != null && inTier.stream().noneMatch(room -> room.getCapacity() >= guests)) {
+            return RoomChoice.refused("A " + tier + " holds " + inTier.get(0).getCapacity()
+                    + ", not " + guests + "." + alsoTry(guests));
+        }
+        return firstFreeRoom(tier, guests, nights, arrival)
+                .map(RoomChoice::found)
+                .orElseGet(() -> RoomChoice.refused(
+                        "No " + tier + " is free for those nights."));
+    }
+
+    /** Naming the tier that does fit saves the clerk working it out from the grid. */
+    private String alsoTry(Integer guests) {
+        if (guests == null) {
+            return "";
+        }
+        return hotel.getRooms().stream()
+                .filter(room -> room.getCapacity() >= guests)
+                .min(Comparator.comparingInt(Room::getCapacity))
+                .map(room -> " A " + room.getTierName() + " holds " + room.getCapacity() + ".")
+                .orElse(" Nothing here holds that many.");
     }
 
     private Optional<Room> firstFreeRoom(String tier, Integer guests, Integer nights, LocalDate arrival) {

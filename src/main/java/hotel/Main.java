@@ -1,5 +1,7 @@
 package hotel;
 
+import com.formdev.flatlaf.FlatLightLaf;
+
 import hotel.ui.MainFrame;
 
 import javax.swing.SwingUtilities;
@@ -13,9 +15,14 @@ public class Main {
         Path dataFile = Path.of(System.getProperty("hotel.data", DEFAULT_DATA_FILE));
         SwingUtilities.invokeLater(() -> {
             try {
-                UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-            } catch (Exception ignored) {
-                // Fall back to the cross-platform look and feel.
+                FlatLightLaf.setup();
+            } catch (RuntimeException ignored) {
+                // The native look and feel is uglier but it still runs.
+                try {
+                    UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+                } catch (Exception alsoIgnored) {
+                    // Cross-platform default it is.
+                }
             }
             MainFrame frame = new MainFrame();
             frame.openStore(dataFile);

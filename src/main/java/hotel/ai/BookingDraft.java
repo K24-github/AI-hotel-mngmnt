@@ -1,10 +1,38 @@
 package hotel.ai;
 
+import dev.langchain4j.model.output.structured.Description;
+
 import java.util.Locale;
 import java.util.Set;
 
-public record BookingDraft(String roomNumber, String tier, String guestName, Integer guests,
-                           Integer nights, Boolean breakfast) {
+/**
+ * The six values the model gives back. Any of them can be null, because the sentence
+ * might not have said it. Nothing here is trusted yet. {@link BookingResolver} checks it
+ * against the sentence and against the hotel first.
+ *
+ * <p>The descriptions go to the model inside the generated schema, but they are only
+ * short labels. The real rules for each field are in the prompt in {@link OllamaConfig}.
+ * I tried keeping them here instead and the model stopped filling tier at all.
+ */
+public record BookingDraft(
+
+        @Description("The room number the sentence names, as text")
+        String roomNumber,
+
+        @Description("Studio, Deluxe or Suite, spelled that way")
+        String tier,
+
+        @Description("The guest name the sentence writes")
+        String guestName,
+
+        @Description("How many people are staying")
+        Integer guests,
+
+        @Description("How many nights the stay lasts")
+        Integer nights,
+
+        @Description("Whether breakfast was asked for")
+        Boolean breakfast) {
 
     public BookingDraft {
         roomNumber = trimmedOrNull(roomNumber);

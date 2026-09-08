@@ -1,9 +1,10 @@
 package hotel.ui;
+import hotel.ai.BookingDraft;
 import hotel.ai.BookingParser;
 import hotel.ai.BookingProposal;
 import hotel.ai.BookingResolver;
 import hotel.ai.ModelHealth;
-import hotel.ai.OllamaBookingParser;
+import hotel.ai.LangChainBookingParser;
 import hotel.ai.OllamaConfig;
 import hotel.model.Booking;
 import hotel.model.BookingStatus;
@@ -70,10 +71,12 @@ public final class MainFrame extends JFrame {
     private final JLabel sentenceStatus = new JLabel(" ");
     private final JCheckBox aiToggle = new JCheckBox("AI", true);
     private final OllamaConfig aiSettings = OllamaConfig.fromSystemProperties();
-    private final BookingParser liveParser = new OllamaBookingParser(aiSettings);
+    private final BookingParser liveParser = new LangChainBookingParser(aiSettings);
     private BookingParser parser = liveParser;
 
-    private record Outcome(Optional<BookingProposal> proposal, boolean modelAnswered) {
+    /** A refusal is the resolver explaining itself; null means the model gave us nothing. */
+    private record Outcome(Optional<BookingProposal> proposal, boolean modelAnswered,
+                           String refusal) {
     }
 
     private final JLabel availableLabel = new JLabel();
@@ -300,12 +303,14 @@ public final class MainFrame extends JFrame {
             @Override
             protected Outcome doInBackground() {
                 LocalDate arrival = arrivalOnScreen();
-                Optional<BookingProposal> resolved = parser.parse(typed).flatMap(read ->
-                        new BookingResolver(hotelManager).resolve(read, typed, arrival));
-                if (resolved.isPresent()) {
-                    return new Outcome(resolved, true);
+                Optional<BookingDraft> read = parser.parse(typed);
+                if (read.isEmpty()) {
+                    return new Outcome(Optional.empty(), ModelHealth.isAnswering(aiSettings), null);
                 }
-                return new Outcome(resolved, ModelHealth.isAnswering(aiSettings));
+                BookingResolver.Resolution resolution =
+                        new BookingResolver(hotelManager).attempt(read.get(), typed, arrival);
+                return new Outcome(Optional.ofNullable(resolution.proposal()), true,
+                        resolution.refusal());
             }
 
             @Override
@@ -316,11 +321,12 @@ public final class MainFrame extends JFrame {
                 try {
                     outcome = get();
                 } catch (Exception ex) {
-                    outcome = new Outcome(Optional.empty(), true);
+                    outcome = new Outcome(Optional.empty(), true, null);
                 }
                 if (outcome.proposal().isEmpty()) {
-                    sentenceStatus.setText(
-                            ModelHealth.messageWhenNothingCameBack(outcome.modelAnswered()));
+                    sentenceStatus.setText(outcome.refusal() != null
+                            ? outcome.refusal()
+                            : ModelHealth.messageWhenNothingCameBack(outcome.modelAnswered()));
                     return;
                 }
                 sentenceStatus.setText(" ");
