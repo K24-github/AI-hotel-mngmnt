@@ -10,6 +10,11 @@ public record OllamaConfig(String endpoint, String model, String promptTemplate,
     public static final String DEFAULT_ENDPOINT = "http://localhost:11434/api/generate";
     public static final String DEFAULT_MODEL = "gemma4:e2b-it-qat";
 
+    /**
+     * The field rules also travel as descriptions on {@link BookingDraft}, but descriptions
+     * alone are not enough: with the rules only in the schema the model stopped filling tier
+     * altogether and put the tier word in roomNumber instead. They earn their place here.
+     */
     public static final String DEFAULT_PROMPT = """
             Extract booking fields from the sentence. Reply with JSON only.
             Indonesian and English may be mixed.
@@ -28,9 +33,7 @@ public record OllamaConfig(String endpoint, String model, String promptTemplate,
             either side of it: tidak, tdk, ga, gak, tanpa, no, not, skip, without.
             guestName: only a name written in the sentence.
 
-            Use null for anything the sentence does not say. Do not guess.
-
-            Sentence: %s""";
+            Use null for anything the sentence does not say. Do not guess.""";
 
     public OllamaConfig {
         if (endpoint == null || endpoint.isBlank()) {
@@ -44,8 +47,8 @@ public record OllamaConfig(String endpoint, String model, String promptTemplate,
         if (model == null || model.isBlank()) {
             throw new IllegalArgumentException("A model name is required.");
         }
-        if (promptTemplate == null || !promptTemplate.contains("%s")) {
-            throw new IllegalArgumentException("The prompt template must have a %s for the sentence.");
+        if (promptTemplate == null || promptTemplate.isBlank()) {
+            throw new IllegalArgumentException("A prompt is required.");
         }
     }
 
@@ -79,6 +82,56 @@ public record OllamaConfig(String endpoint, String model, String promptTemplate,
         }
     }
 
+    public String baseUrl() {
+        return baseUrlOf(endpoint);
+    }
+
+    /**
+     * LangChain4j wants the server, not a route on it, so the path comes off. The settings
+     * still hold a full endpoint because that is what the eval harness posts to when it
+     * unloads a model, and there is no call in the library for that.
+     *
+     * @return null if the endpoint has no host to find
+     */
+    static String baseUrlOf(String endpoint) {
+        if (endpoint == null) {
+            return null;
+        }
+        try {
+            URI whole = URI.create(endpoint);
+            if (whole.getHost() == null) {
+                return null;
+            }
+            String port = (whole.getPort() == -1) ? "" : ":" + whole.getPort();
+            return whole.getScheme() + "://" + whole.getHost() + port;
+        } catch (RuntimeException ex) {
+            return null;
+        }
+    }
+
+    /** Ollama takes a duration string over its own API, and seconds through LangChain4j. */
+    public Integer keepAliveSeconds() {
+        if (keepAlive == null || keepAlive.isBlank()) {
+            return null;
+        }
+        String trimmed = keepAlive.trim();
+        char unit = trimmed.charAt(trimmed.length() - 1);
+        try {
+            if (Character.isDigit(unit)) {
+                return Integer.valueOf(trimmed);
+            }
+            int amount = Integer.parseInt(trimmed.substring(0, trimmed.length() - 1));
+            return switch (unit) {
+                case 's' -> amount;
+                case 'm' -> amount * 60;
+                case 'h' -> amount * 3600;
+                default -> null;
+            };
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
     public static OllamaConfig of(String model) {
         return new OllamaConfig(DEFAULT_ENDPOINT, model, DEFAULT_PROMPT,
                 1024, 96, "30m", Duration.ofSeconds(30), null);
@@ -99,9 +152,5 @@ public record OllamaConfig(String endpoint, String model, String promptTemplate,
     public OllamaConfig withModel(String otherModel) {
         return new OllamaConfig(endpoint, otherModel, promptTemplate,
                 contextTokens, replyTokens, keepAlive, timeout, gpuLayers);
-    }
-
-    public String promptFor(String sentence) {
-        return promptTemplate.formatted(sentence);
     }
 }

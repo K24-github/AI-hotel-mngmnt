@@ -3,7 +3,7 @@ import hotel.ai.BookingParser;
 import hotel.ai.BookingProposal;
 import hotel.ai.BookingResolver;
 import hotel.ai.ModelHealth;
-import hotel.ai.OllamaBookingParser;
+import hotel.ai.LangChainBookingParser;
 import hotel.ai.OllamaConfig;
 import hotel.model.Booking;
 import hotel.model.BookingStatus;
@@ -70,7 +70,7 @@ public final class MainFrame extends JFrame {
     private final JLabel sentenceStatus = new JLabel(" ");
     private final JCheckBox aiToggle = new JCheckBox("AI", true);
     private final OllamaConfig aiSettings = OllamaConfig.fromSystemProperties();
-    private final BookingParser liveParser = new OllamaBookingParser(aiSettings);
+    private final BookingParser liveParser = new LangChainBookingParser(aiSettings);
     private BookingParser parser = liveParser;
 
     private record Outcome(Optional<BookingProposal> proposal, boolean modelAnswered) {
