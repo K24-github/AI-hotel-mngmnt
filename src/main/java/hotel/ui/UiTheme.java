@@ -1,4 +1,6 @@
 package hotel.ui;
+
+import com.formdev.flatlaf.FlatClientProperties;
 import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -8,16 +10,15 @@ import javax.swing.JPanel;
 import javax.swing.SwingConstants;
 import javax.swing.border.Border;
 import javax.swing.border.EmptyBorder;
-import javax.swing.plaf.basic.BasicButtonUI;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.Font;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 import java.text.NumberFormat;
+import java.util.LinkedHashMap;
 import java.util.Locale;
+import java.util.Map;
 
 final class UiTheme {
     static final Color BACKGROUND = new Color(241, 245, 249);
@@ -47,8 +48,6 @@ final class UiTheme {
     /** Slightly smaller, for currency values that would otherwise be clipped. */
     static final Font STAT_MONEY = new Font("SansSerif", Font.BOLD, 14);
     static final Font ROOM_BUTTON = new Font("SansSerif", Font.BOLD, 12);
-
-    private static final String BASE_COLOR = "hotel.baseColor";
 
     private UiTheme() {
     }
@@ -124,37 +123,29 @@ final class UiTheme {
     }
 
     /**
-     * Forces a solid, self-painted button.
+     * A solid button in a colour we choose.
      * <p>
-     * The Windows and GTK look-and-feels draw buttons with the native theme engine and
-     * ignore {@code setBackground}, so a coloured button comes out white with only a
-     * tinted border. Installing {@link BasicButtonUI} puts the fill back under our
-     * control on every platform.
+     * This used to install {@code BasicButtonUI} by hand, because the Windows and GTK
+     * look-and-feels paint buttons with the native theme engine and ignore
+     * {@code setBackground}. FlatLaf paints its own buttons on every platform and takes
+     * the colours, so the hand-rolled hover and press states went with it.
      */
     static void styleFlat(AbstractButton button, Color background, Color foreground) {
-        button.setUI(new BasicButtonUI());   // must run before the colours are applied
-        button.setOpaque(true);
-        button.setContentAreaFilled(true);
         button.setFocusPainted(false);
         button.setForeground(foreground);
         button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         setFlatBackground(button, background);
-        button.addMouseListener(new FlatHoverListener(button));
     }
 
-    /** Repaints a flat button in a new colour, keeping hover and border in step. */
+    /** Repaints a flat button in a new colour, keeping hover, press and border in step. */
     static void setFlatBackground(AbstractButton button, Color background) {
-        button.putClientProperty(BASE_COLOR, background);
-        button.setBackground(background);
-        button.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(blend(background, Color.BLACK, 0.18)),
-                new EmptyBorder(6, 10, 6, 10)
-        ));
-    }
-
-    private static Color baseColorOf(AbstractButton button) {
-        Object stored = button.getClientProperty(BASE_COLOR);
-        return (stored instanceof Color color) ? color : button.getBackground();
+        Map<String, Object> style = new LinkedHashMap<>();
+        style.put("background", background);
+        style.put("hoverBackground", blend(background, Color.WHITE, 0.18));
+        style.put("pressedBackground", blend(background, Color.BLACK, 0.18));
+        style.put("borderColor", blend(background, Color.BLACK, 0.18));
+        style.put("focusedBorderColor", blend(background, Color.BLACK, 0.18));
+        button.putClientProperty(FlatClientProperties.STYLE, style);
     }
 
     private static Color blend(Color from, Color to, double ratio) {
@@ -163,45 +154,5 @@ final class UiTheme {
                 (int) Math.round(from.getGreen() * (1 - ratio) + to.getGreen() * ratio),
                 (int) Math.round(from.getBlue() * (1 - ratio) + to.getBlue() * ratio)
         );
-    }
-
-    /**
-     * Hover and press feedback, which {@link BasicButtonUI} does not provide on its own.
-     * The base colour is read from the button each time rather than captured, so a room
-     * tile that flips from green to red keeps behaving correctly.
-     */
-    private static final class FlatHoverListener extends MouseAdapter {
-        private final AbstractButton button;
-
-        private FlatHoverListener(AbstractButton button) {
-            this.button = button;
-        }
-
-        @Override
-        public void mouseEntered(MouseEvent event) {
-            if (button.isEnabled()) {
-                button.setBackground(blend(baseColorOf(button), Color.WHITE, 0.18));
-            }
-        }
-
-        @Override
-        public void mouseExited(MouseEvent event) {
-            button.setBackground(baseColorOf(button));
-        }
-
-        @Override
-        public void mousePressed(MouseEvent event) {
-            if (button.isEnabled()) {
-                button.setBackground(blend(baseColorOf(button), Color.BLACK, 0.18));
-            }
-        }
-
-        @Override
-        public void mouseReleased(MouseEvent event) {
-            boolean stillInside = button.contains(event.getPoint());
-            button.setBackground(stillInside
-                    ? blend(baseColorOf(button), Color.WHITE, 0.18)
-                    : baseColorOf(button));
-        }
     }
 }
